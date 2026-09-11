@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: vaanilai-ai-backend
+    runtime: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python run.py"
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: DEBUG
+        value: "False"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        value: sqlite+aiosqlite:///./vaanilai.db

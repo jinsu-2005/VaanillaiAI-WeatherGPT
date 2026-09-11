@@ -1,0 +1,22 @@
+# Python / Virtual Environment
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.sqlite3
+*.db
+.env
+*.env
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+.pub/
+.pub-spec.lock
+ios/Flutter/ephemeral/
+.idea/
+.vscode/

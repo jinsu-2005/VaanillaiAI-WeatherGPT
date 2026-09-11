@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "380758138825",
+    "project_id": "vaanilai-ai",
+    "storage_bucket": "vaanilai-ai.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:380758138825:android:571b242b6ac5adc0dad218",
+        "android_client_info": {
+          "package_name": "com.vaanilaiai.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDRPPhVU51sG20zuMdAaXx9wYaWTR32lsc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
