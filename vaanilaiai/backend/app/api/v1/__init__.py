@@ -11,6 +11,9 @@ from app.api.v1 import (
     voice,
     vision,
     reports,
+    hydro,
+    monsoon,
+    safar,
 )
 
 api_router = APIRouter()
@@ -25,3 +28,7 @@ api_router.include_router(chat.router, prefix="/chat", tags=["Conversational AI"
 api_router.include_router(voice.router, prefix="/voice", tags=["Voice Interaction"])
 api_router.include_router(vision.router, prefix="/vision", tags=["Multimodal Vision AI"])
 api_router.include_router(reports.router, prefix="/reports", tags=["Citizen Science & Ground Truth"])
+api_router.include_router(hydro.router, prefix="/hydro", tags=["CWC River Basin & Dam Hydro-Telemetry"])
+api_router.include_router(monsoon.router, prefix="/monsoon", tags=["Monsoon & Teleconnections"])
+api_router.include_router(safar.router, prefix="/air-quality", tags=["Air Quality & Atmospheric Dispersion"])
+

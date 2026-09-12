@@ -48,14 +48,19 @@ Respond ONLY in valid JSON matching this schema:
             return self._generate_fallback(location_name)
 
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=settings.GEMINI_API_KEY)
+            from google import genai
+            from google.genai import types
 
-            model = genai.GenerativeModel("gemini-2.5-flash")
-            response = await model.generate_content_async([
-                self.SYSTEM_PROMPT,
-                {"mime_type": mime_type, "data": image_bytes}
-            ])
+            client = genai.Client(api_key=settings.GEMINI_API_KEY)
+            model_to_use = settings.GEMINI_MODEL or "gemini-3.1-flash-lite"
+            
+            response = client.models.generate_content(
+                model=model_to_use,
+                contents=[
+                    types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                    self.SYSTEM_PROMPT,
+                ]
+            )
 
             text = response.text.strip()
             # Clean markdown fences

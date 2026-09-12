@@ -1,12 +1,13 @@
-"""Location search, geocoding, reverse geocoding, and favorites management."""
+import json
 import logging
-from typing import List, Optional
+from pathlib import Path
+from typing import Dict, List, Optional
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.core.config import settings
 from app.models.location import SavedLocation
-from app.schemas.location import LocationSearchResult, SavedLocationCreate, SavedLocationResponse
+from app.schemas.location import LocationSearchResult, SavedLocationCreate, SavedLocationResponse, IMDStationEntry
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,47 @@ DEFAULT_INDIAN_LOCATIONS = [
 
 class LocationService:
     """Service for resolving location queries, coordinates, and managing saved places."""
+
+    def __init__(self):
+        self._stations: Dict[str, str] = self._load_imd_stations()
+
+    def _load_imd_stations(self) -> Dict[str, str]:
+        """Load the 697 Indian City IMD/WMO station ID mapping from resources."""
+        stations: Dict[str, str] = {}
+        try:
+            res_path = Path(__file__).resolve().parent.parent / "resources" / "imd_stations.json"
+            if res_path.exists():
+                with open(res_path, "r", encoding="utf-8") as f:
+                    stations = json.load(f)
+        except Exception as e:
+            logger.warning(f"Could not load local IMD station directory: {e}")
+        return stations
+
+    def find_imd_stations(self, query: str = "", limit: int = 20) -> List[IMDStationEntry]:
+        """Search the 697 Indian City IMD/WMO station ID catalog."""
+        q = query.strip().lower()
+        if not q:
+            return [IMDStationEntry(station_id=sid, city_name=name) for sid, name in list(self._stations.items())[:limit]]
+        
+        matches: List[IMDStationEntry] = []
+        for sid, name in self._stations.items():
+            if q in sid.lower() or q in name.lower():
+                matches.append(IMDStationEntry(station_id=sid, city_name=name))
+                if len(matches) >= limit:
+                    break
+        return matches
+
+    def match_station_id(self, name: Optional[str], district: Optional[str] = None) -> Optional[str]:
+        """Match a location name or district to an official IMD station ID."""
+        if not name and not district:
+            return None
+        candidates = [c.lower().strip() for c in [name, district] if c]
+        for sid, sname in self._stations.items():
+            s_clean = sname.lower().strip()
+            for cand in candidates:
+                if cand == s_clean or cand in s_clean or s_clean in cand:
+                    return sid
+        return None
 
     async def search_locations(self, query: str, count: int = 10) -> List[LocationSearchResult]:
         """Search Indian towns, villages, and cities."""
@@ -64,10 +106,13 @@ class LocationService:
                         if country:
                             display_parts.append(country)
 
+                        loc_name = item.get("name")
+                        station_id = self.match_station_id(loc_name, district)
+
                         results.append(
                             LocationSearchResult(
                                 id=item.get("id"),
-                                name=item.get("name"),
+                                name=loc_name,
                                 district=district,
                                 state=state,
                                 country=country,
@@ -75,7 +120,8 @@ class LocationService:
                                 longitude=float(item.get("longitude")),
                                 elevation=float(item.get("elevation", 0.0)) if item.get("elevation") is not None else None,
                                 is_village=is_village,
-                                display_name=", ".join(display_parts)
+                                display_name=", ".join(display_parts),
+                                imd_station_id=station_id,
                             )
                         )
         except Exception as e:
@@ -85,6 +131,7 @@ class LocationService:
         if not results:
             for loc in DEFAULT_INDIAN_LOCATIONS:
                 if query.lower() in loc["name"].lower() or (loc["district"] and query.lower() in loc["district"].lower()):
+                    station_id = self.match_station_id(loc["name"], loc["district"])
                     results.append(
                         LocationSearchResult(
                             name=loc["name"],
@@ -93,7 +140,8 @@ class LocationService:
                             country="India",
                             latitude=loc["lat"],
                             longitude=loc["lon"],
-                            display_name=f"{loc['name']}, {loc['district']}, {loc['state']}, India"
+                            display_name=f"{loc['name']}, {loc['district']}, {loc['state']}, India",
+                            imd_station_id=station_id,
                         )
                     )
 

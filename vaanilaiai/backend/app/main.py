@@ -23,11 +23,12 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description=(
-        "**VaanilaiAI (WeatherGPT)**: Official Conversational AI & Weather Intelligence Platform.\n\n"
-        "Built for Ministry of Earth Sciences (MoES) & India Meteorological Department (IMD).\n"
-        "Features: Zero-Hallucination Weather Intelligence, Coordinate-Level NWP Model Fusion, "
-        "Disaster Management & Warnings (Red/Orange/Yellow), Agro-Met & Travel Advisories, "
-        "Historical Climate Trends, Multilingual (English, Tamil, Hindi) & Voice Interaction."
+        "**VaanilaiAI (WeatherGPT)**: Conversational AI Weather Intelligence Platform.\n\n"
+        "Features: Weather Forecasting (via Open-Meteo NWP models), "
+        "Disaster Alerts & Warnings, Agro-Met & Travel Advisories, "
+        "Historical Climate Trends, Multilingual (English, Tamil, Hindi) & Voice Interaction.\n\n"
+        "Weather data sourced from Open-Meteo (ECMWF/GFS models). "
+        "Official disaster alerts sourced from NDMA/IMD when available."
     ),
     version=settings.VERSION,
     lifespan=lifespan,
@@ -36,10 +37,13 @@ app = FastAPI(
 )
 
 # Configure CORS
+cors_origins = settings.get_cors_origins()
+allow_credentials = "*" not in cors_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -12,6 +12,15 @@ import '../models/crop_stage_model.dart';
 import '../models/lightning_model.dart';
 import '../models/citizen_report_model.dart';
 import '../models/sky_analysis_model.dart';
+import '../models/agromet_bulletin_model.dart';
+import '../models/multi_model_nwp_model.dart';
+import '../models/imd_sop_model.dart';
+import '../models/satellite_radar_model.dart';
+import '../models/hydro_model.dart';
+import '../models/monsoon_model.dart';
+import '../models/safar_model.dart';
+import '../models/cyclone_model.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
   static const String _envBackendUrl = String.fromEnvironment('BACKEND_URL', defaultValue: '');
@@ -168,22 +177,18 @@ class ApiService {
           conditionIcon: '01d',
           isDay: ((current['is_day'] as num?)?.toInt() ?? 1) == 1,
           provenance: WeatherProvenanceModel(
-            sourceType: 'NWP_MODEL_ECMWF',
-            providerName: 'Open-Meteo High-Resolution NWP',
-            forecastConfidence: 0.95,
+            sourceType: 'FORECAST_MODEL',
+            providerName: 'Open-Meteo (direct fallback)',
+            forecastConfidence: 0.0, // No meaningful confidence for direct fallback
             lastUpdated: DateTime.now().toIso8601String(),
           ),
         ),
         hourly: hourlyList,
         daily: dailyList,
-        airQuality: AirQualityModel(
-          aqi: 28,
-          pm25: 18.0,
-          pm10: 32.0,
-          category: 'Good',
-          colorHex: '#38A169',
-        ),
+        // Air quality data not available via direct Open-Meteo forecast fallback
+        airQuality: null,
         activeWarnings: [],
+        dataSource: 'forecast_model',
       );
     }
 
@@ -318,14 +323,14 @@ class ApiService {
           if (d.precipitationSum >= 64.5) {
             final isOrange = d.precipitationSum >= 115.6;
             syntheticAlerts.add(DisasterAlertModel(
-              alertId: 'NWP-RAIN-${d.date}',
-              source: 'NWP Meteorological Guidance (IMD / ECMWF Model)',
-              category: isOrange ? 'Heavy Rainfall Warning' : 'Heavy Rainfall Watch',
+              alertId: 'FORECAST-RAIN-${d.date}',
+              source: 'Forecast model estimate (Open-Meteo) — not an official IMD warning',
+              category: isOrange ? 'Heavy Rainfall Risk (Forecast)' : 'Rainfall Watch (Forecast)',
               severity: isOrange ? 'Orange' : 'Yellow',
               urgency: 'Expected',
-              headline: '${isOrange ? "Heavy" : "Moderate to Heavy"} Rain Alert: ${d.precipitationSum.toStringAsFixed(1)} mm predicted',
-              description: 'Model guidance indicates precipitation of ${d.precipitationSum.toStringAsFixed(1)} mm with ${d.precipitationProbabilityMax}% probability.',
-              instruction: 'Avoid low-lying waterlogged areas and keep an umbrella handy.',
+              headline: '${isOrange ? "Heavy" : "Moderate to Heavy"} rain forecast: ${d.precipitationSum.toStringAsFixed(1)} mm',
+              description: 'Weather models predict ${d.precipitationSum.toStringAsFixed(1)} mm rainfall with ${d.precipitationProbabilityMax}% probability. This is a forecast estimate, not an official warning.',
+              instruction: 'Avoid low-lying waterlogged areas and keep an umbrella handy. Check official IMD alerts for confirmed warnings.',
               areaDescription: district ?? 'Selected Region',
               district: district,
               state: state,
@@ -408,7 +413,7 @@ class ApiService {
     return _computeDirectTravelAdvisory(latitude, longitude, locationName, district);
   }
 
-  // 7. Climate Comparison with Direct Historical Archive Fallback
+  // 7. Climate Comparison with SharedPreferences Cache & Direct Archive Fallback
   Future<ClimateComparisonModel> compareClimate({
     required double latitude,
     required double longitude,
@@ -416,6 +421,9 @@ class ApiService {
     int year1 = 2022,
     int year2 = 2023,
   }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'climate_compare_${latitude.toStringAsFixed(2)}_${longitude.toStringAsFixed(2)}_${year1}_$year2';
+
     try {
       final uri = Uri.parse('$baseUrl/api/v1/climate/compare').replace(
         queryParameters: {
@@ -430,16 +438,26 @@ class ApiService {
       final response = await http.get(uri).timeout(const Duration(seconds: 15));
       if (response.statusCode == 200) {
         final data = json.decode(utf8.decode(response.bodyBytes));
-        return ClimateComparisonModel.fromJson(data);
+        await prefs.setString(cacheKey, json.encode(data));
+        return ClimateComparisonModel.fromJson(data, isOfflineCached: false);
       }
     } catch (e) {
-      debugPrint('Backend climate compare error: $e. Falling back to direct Open-Meteo archive client.');
+      debugPrint('Backend climate compare error: $e. Checking offline cache.');
+    }
+
+    // Check SharedPreferences offline cache
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return ClimateComparisonModel.fromJson(cachedData, isOfflineCached: true);
+      } catch (_) {}
     }
 
     return _fetchDirectClimateComparison(latitude, longitude, locationName, year1, year2);
   }
 
-  // 8. Climate Trends with Direct Historical Archive Fallback
+  // 8. Climate Trends with SharedPreferences Cache & Direct Archive Fallback
   Future<ClimateTrendModel> getClimateTrends({
     required double latitude,
     required double longitude,
@@ -447,6 +465,9 @@ class ApiService {
     int startYear = 2018,
     int endYear = 2024,
   }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'climate_trends_${latitude.toStringAsFixed(2)}_${longitude.toStringAsFixed(2)}_${startYear}_$endYear';
+
     try {
       final uri = Uri.parse('$baseUrl/api/v1/climate/trends').replace(
         queryParameters: {
@@ -461,10 +482,20 @@ class ApiService {
       final response = await http.get(uri).timeout(const Duration(seconds: 20));
       if (response.statusCode == 200) {
         final data = json.decode(utf8.decode(response.bodyBytes));
-        return ClimateTrendModel.fromJson(data);
+        await prefs.setString(cacheKey, json.encode(data));
+        return ClimateTrendModel.fromJson(data, isOfflineCached: false);
       }
     } catch (e) {
-      debugPrint('Backend climate trends error: $e. Falling back to direct Open-Meteo archive client.');
+      debugPrint('Backend climate trends error: $e. Checking offline cache.');
+    }
+
+    // Check SharedPreferences offline cache
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return ClimateTrendModel.fromJson(cachedData, isOfflineCached: true);
+      } catch (_) {}
     }
 
     return _fetchDirectClimateTrends(latitude, longitude, locationName, startYear, endYear);
@@ -624,8 +655,8 @@ class ApiService {
     };
 
     final prompt = '''
-You are VaanilaiAI (WeatherGPT), the premier meteorological and agricultural disaster management assistant for India (Ministry of Earth Sciences / IMD).
-Answer the user query accurately and conversationally based exclusively on this official telemetry:
+You are VaanilaiAI (WeatherGPT), a helpful weather assistant for India.
+Answer the user query based on this weather data:
 ${json.encode(contextData)}
 
 User Query: $query
@@ -635,7 +666,9 @@ Rules:
 - Respond cleanly with emojis and bullet points.
 - NEVER use triple asterisks '***' or '#' headers.
 - Answer in $language (English, Tamil தமிழ், or Hindi हिन्दी).
+- Data source is Open-Meteo forecast models. Do not call this "official IMD data".
 - Provide practical recommendations for citizens and farmers (e.g., spray suitability, rain safety, heat index).
+- For severe weather, recommend checking official IMD warnings.
 ''';
 
     const apiKey = String.fromEnvironment('GEMINI_API_KEY', defaultValue: '');
@@ -709,7 +742,7 @@ Rules:
         language: language,
         intent: 'gemini_agent_direct',
         detectedLocation: locationName,
-        citations: ['Google $usedModel', 'India Meteorological Department (IMD)', 'ECMWF High-Resolution NWP 2.5km'],
+        citations: ['Open-Meteo forecast model', 'Google $usedModel'],
         toolsUsed: ['get_weather_forecast'],
         weatherCard: curr != null
             ? WeatherCardSummaryModel(
@@ -722,7 +755,7 @@ Rules:
                 windSpeed: curr.windSpeed,
                 rainProbability: today?.precipitationProbabilityMax ?? 0,
                 uvIndex: curr.uvIndex,
-                sourceType: 'NWP_MODEL_ECMWF',
+                sourceType: 'FORECAST_MODEL',
               )
             : null,
       );
@@ -776,7 +809,7 @@ Rules:
       language: language,
       intent: 'deterministic_offline_rule_engine',
       detectedLocation: locationName,
-      citations: ['India Meteorological Department (IMD) Direct Feed', 'High-Resolution NWP ECMWF Grid'],
+      citations: ['Open-Meteo forecast model (offline fallback)'],
       toolsUsed: ['get_weather_forecast'],
       weatherCard: curr != null
           ? WeatherCardSummaryModel(
@@ -789,7 +822,7 @@ Rules:
               windSpeed: curr.windSpeed,
               rainProbability: today?.precipitationProbabilityMax ?? 0,
               uvIndex: curr.uvIndex,
-              sourceType: 'NWP_MODEL_ECMWF',
+              sourceType: 'FORECAST_MODEL',
             )
           : null,
     );
@@ -1059,28 +1092,7 @@ Rules:
       }
     } catch (_) {}
 
-    return _buildBaselineYearlyStats(year);
-  }
-
-  YearlyClimateStatsModel _buildBaselineYearlyStats(int year) {
-    final monthNames = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December'
-    ];
-    return YearlyClimateStatsModel(
-      year: year,
-      annualRainfallMm: 980.0,
-      annualMeanTempC: 27.5,
-      maxTempRecordedC: 36.5,
-      minTempRecordedC: 21.0,
-      monthlyStats: List.generate(12, (i) => MonthlyClimateStatsModel(
-        monthName: monthNames[i],
-        monthIndex: i + 1,
-        avgTemperatureC: 27.0 + (i % 3),
-        totalRainfallMm: 60.0 + (i * 8.0),
-        rainyDaysCount: 4 + (i % 5),
-      )),
-    );
+    throw Exception('Historical climate data unavailable for year $year. The archive service could not be reached.');
   }
 
   // Direct Climate Trends via Open-Meteo Archive
@@ -1097,8 +1109,12 @@ Rules:
         final s = await _fetchDirectYearlyStats(lat, lon, y);
         multiYear.add(s);
       } catch (_) {
-        multiYear.add(_buildBaselineYearlyStats(y));
+        // Skip unavailable years rather than fabricating data
       }
+    }
+
+    if (multiYear.isEmpty) {
+      throw Exception('Historical climate data unavailable for the period $startYear-$endYear.');
     }
 
     final totalRain = multiYear.isNotEmpty ? multiYear.map((s) => s.annualRainfallMm).reduce((a, b) => a + b) : 0.0;
@@ -1134,6 +1150,9 @@ Rules:
     required double longitude,
     String locationName = 'Coastal Waters',
   }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'marine_advisory_${latitude.toStringAsFixed(2)}_${longitude.toStringAsFixed(2)}';
+
     try {
       final uri = Uri.parse('$baseUrl/api/v1/advisories/marine').replace(
         queryParameters: {
@@ -1146,61 +1165,25 @@ Rules:
       final response = await http.get(uri).timeout(const Duration(seconds: 12));
       if (response.statusCode == 200) {
         final data = json.decode(utf8.decode(response.bodyBytes));
-        return MarineAdvisoryModel.fromJson(data);
+        await prefs.setString(cacheKey, json.encode(data));
+        return MarineAdvisoryModel.fromJson(data, isCached: false);
       }
     } catch (e) {
-      debugPrint('Backend marine advisory error: $e. Falling back to direct oceanographic computation.');
+      debugPrint('Backend marine advisory error: $e. Checking offline cache.');
     }
 
-    return _computeDirectMarineAdvisory(latitude, longitude, locationName);
-  }
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return MarineAdvisoryModel.fromJson(cachedData, isCached: true);
+      } catch (_) {}
+    }
 
-  MarineAdvisoryModel _computeDirectMarineAdvisory(double lat, double lon, String locationName) {
-    final isBayOfBengal = lon > 80.0 && lat < 22.0;
-    final isArabianSea = lon <= 80.0 && lat < 24.0;
-    final region = isBayOfBengal
-        ? 'Bay of Bengal Coastal Sector'
-        : (isArabianSea ? 'Arabian Sea Coastal Sector' : 'Peninsular Coastal Waters');
-
-    final waveHeight = 1.2 + ((lat * 3 + lon * 2) % 10) * 0.1;
-    final windKnots = 12 + ((lat.toInt() + lon.toInt()) % 12);
-    final sst = 28.5 + ((lat.toInt() % 3) * 0.4);
-    final chlorophyll = 1.3 + ((lon.toInt() % 4) * 0.3);
-    final isSafe = windKnots < 25 && waveHeight < 2.5;
-
-    return MarineAdvisoryModel(
-      locationName: locationName,
-      coastalRegion: region,
-      date: DateTime.now().toIso8601String().substring(0, 10),
-      seaCondition: isSafe ? 'Slight to Moderate' : 'Rough Sea Alert',
-      seaConditionColor: isSafe ? 'Green' : 'Yellow',
-      significantWaveHeightM: double.parse(waveHeight.toStringAsFixed(1)),
-      swellPeriodSeconds: 9.2,
-      coastalWindKnots: windKnots,
-      coastalWindKmH: double.parse((windKnots * 1.852).toStringAsFixed(1)),
-      windGustsKmH: double.parse((windKnots * 2.3).toStringAsFixed(1)),
-      windDirectionDeg: 195,
-      windDirectionCardinal: 'SSW',
-      seaSurfaceTemperatureC: double.parse(sst.toStringAsFixed(1)),
-      chlorophyllAMgM3: double.parse(chlorophyll.toStringAsFixed(2)),
-      potentialFishingZoneStatus: isSafe ? 'Productive Chlorophyll Belt Identified' : 'Suspended due to wave height',
-      pfzBearingDirection: '145° SE of coastline',
-      pfzDistanceNauticalMiles: 18.5,
-      deepSeaNavigationSafe: isSafe,
-      fishermenWarningText: isSafe
-          ? 'Squall not expected. Safe for artisanal and mechanized fishing up to 50 nautical miles.'
-          : 'Squally weather with wind speeds 40-50 km/h. Fishermen are advised not to venture into deep sea.',
-      portWarningSignalNumber: isSafe ? 0 : 3,
-      portWarningSignalName: isSafe ? 'No Warning Hoisted' : 'Local Cautionary Signal No. III',
-      portWarningSignalDescription: isSafe
-          ? 'Port operations normal. Calm navigational channels.'
-          : 'Port is threatened by squally weather. Coastal vessels to take shelter.',
-      tideHighTime: '01:40 PM',
-      tideHighHeightM: 1.55,
-      tideLowTime: '07:25 PM',
-      tideLowHeightM: 0.38,
-      officialAuthority: 'INCOIS (Indian National Centre for Ocean Information Services) & IMD Marine Division',
-    );
+    // Return calibrated fallback with coastal vs inland detection
+    final isLikelyCoastal = (latitude <= 24.0 && (longitude >= 68.0 && longitude <= 89.5));
+    return MarineAdvisoryModel.defaultFallback(locationName, isCoastal: isLikelyCoastal);
   }
 
   // 11. ICAR-GKMS Crop Phenology & Stage-Based Advisory
@@ -1343,6 +1326,9 @@ Rules:
     required double longitude,
     String locationName = 'Location',
   }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'lightning_alert_${latitude.toStringAsFixed(2)}_${longitude.toStringAsFixed(2)}';
+
     try {
       final uri = Uri.parse('$baseUrl/api/v1/alerts/lightning').replace(
         queryParameters: {
@@ -1354,43 +1340,26 @@ Rules:
 
       final response = await http.get(uri).timeout(const Duration(seconds: 12));
       if (response.statusCode == 200) {
-        final data = json.decode(utf8.decode(response.bodyBytes));
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
         return LightningAlertModel.fromJson(data);
       }
     } catch (e) {
-      debugPrint('Backend lightning alert error: $e. Falling back to deterministic convective calculation.');
+      debugPrint('Backend lightning alert error: $e. Checking offline cache.');
     }
 
-    return _computeDirectLightningAlert(latitude, longitude, locationName);
+    final cachedStr = prefs.getString(cacheKey);
+    if (cachedStr != null) {
+      try {
+        final cachedData = json.decode(cachedStr) as Map<String, dynamic>;
+        return LightningAlertModel.fromJson(cachedData);
+      } catch (_) {}
+    }
+
+    // No fabricated data — return an honest "unavailable" response
+    return LightningAlertModel.unavailable(locationName);
   }
 
-  LightningAlertModel _computeDirectLightningAlert(double lat, double lon, String locationName) {
-    final now = DateTime.now();
-    final hour = now.hour;
-    // Afternoon convective hours (13:00 - 18:00) generally carry higher CAPE
-    final isAfternoon = hour >= 13 && hour <= 18;
-    final nearestStrike = isAfternoon ? 14.5 : 48.0;
-    final threat = nearestStrike < 15.0
-        ? 'High Threat'
-        : (nearestStrike < 30.0 ? 'Moderate Alert' : 'Safe');
-
-    return LightningAlertModel(
-      locationName: locationName,
-      threatLevel: threat,
-      nearestStrikeKm: nearestStrike,
-      strikesLast30m: isAfternoon ? 8 : 0,
-      strikeTrend: isAfternoon ? 'Approaching Eastward' : 'Stationary / Dissipating',
-      capeThunderstormIndexJKg: isAfternoon ? 1450.0 : 380.0,
-      soundRumbleAudible: nearestStrike <= 16.0,
-      safetyRule3030: '30-30 Safety Rule: When thunder follows lightning in less than 30 seconds, seek substantial indoor shelter. Stay indoors for 30 minutes after the last clap of thunder.',
-      fieldSafetyGuidance: [
-        'Do NOT shelter under isolated trees, metal sheds, or open tractor roofs.',
-        'If caught in an open field, crouch down into a ball with heels touching to minimize ground current contact.',
-        'Disconnect sensitive electronic equipment and stay away from barbed wire fences.',
-      ],
-      lastUpdated: '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} IST (Damini / IITM Telemetry)',
-    );
-  }
 
   // 13. Multimodal Sky Vision AI
   Future<SkyAnalysisModel> analyzeSkyBase64({
@@ -1415,33 +1384,11 @@ Rules:
         return SkyAnalysisModel.fromJson(data);
       }
     } catch (e) {
-      debugPrint('Backend sky vision error: $e. Falling back to local meteorological vision estimator.');
+      debugPrint('Backend sky vision error: $e.');
     }
 
-    return _computeDirectSkyAnalysis(locationName);
-  }
-
-  SkyAnalysisModel _computeDirectSkyAnalysis(String locationName) {
-    final now = DateTime.now();
-    final hour = now.hour;
-    final isEvening = hour >= 16 && hour <= 20;
-
-    return SkyAnalysisModel(
-      cloudGenus: isEvening ? 'Cumulonimbus Calvus' : 'Stratocumulus Perlucidus',
-      cloudDescription: isEvening
-          ? 'Dense towering vertical convective clouds with dark base indicating active updraft and developing precipitation core.'
-          : 'Low-level patchwork of rounded rolls and patches with break-through sunlight, indicating stable to mildly convective boundary layer.',
-      cloudCoveragePercentage: isEvening ? 78 : 55,
-      rainOnsetEstimatedMinutes: isEvening ? 35 : null,
-      squallRiskLevel: isEvening ? 'Moderate' : 'Low',
-      confidenceScore: 0.88,
-      actionableVerdict: isEvening
-          ? 'Precipitation probable within 30-45 minutes. Farmers should secure harvested grain and commuters should plan travel before squalls begin.'
-          : 'Fair weather conditions likely to persist. Favorable for outdoor agricultural spraying and open transportation.',
-      vernacularSummary: isEvening
-          ? 'கருமேகங்கள் திரண்டு வருகின்றன, அடுத்த 45 நிமிடங்களில் மழை பெய்ய வாய்ப்புள்ளது. தானியங்களை பாதுகாப்பான இடத்திற்கு மாற்றவும்.'
-          : 'வானம் மிதமான மேகங்களுடன் காணப்படுகிறது. அடுத்த சில மணி நேரங்களுக்கு பலத்த மழைக்கான வாய்ப்பு குறைவு.',
-    );
+    // No fabricated data — return an honest "unavailable" response
+    return SkyAnalysisModel.unavailable(locationName);
   }
 
   // 14. Crowdsourced Citizen Science & Urban Telemetry
@@ -1465,10 +1412,11 @@ Rules:
         return list.map((item) => CitizenReportModel.fromJson(item)).toList();
       }
     } catch (e) {
-      debugPrint('Backend citizen reports error: $e. Falling back to local curated reports.');
+      debugPrint('Backend citizen reports error: $e.');
     }
 
-    return _getFallbackCitizenReports(latitude ?? 13.0827, longitude ?? 80.2707);
+    // No fabricated fallback data — return empty list
+    return [];
   }
 
   Future<CitizenReportModel> submitCitizenReport(CitizenReportModel report) async {
@@ -1518,47 +1466,464 @@ Rules:
     return 1;
   }
 
-  List<CitizenReportModel> _getFallbackCitizenReports(double lat, double lon) {
-    return [
-      CitizenReportModel(
-        id: 'rep_1',
-        reportType: 'Waterlogging',
-        severity: 'Moderate',
-        waterDepthInches: 8.5,
-        description: 'Waterlogging under metro underpass. Slow moving traffic in both directions.',
-        latitude: lat + 0.015,
-        longitude: lon + 0.008,
-        locationName: 'Subway & Low-lying Junction',
-        reporterRole: 'Traffic Warden',
-        upvotes: 18,
-        createdAt: '12 mins ago',
-      ),
-      CitizenReportModel(
-        id: 'rep_2',
-        reportType: 'Wind Damage',
-        severity: 'Low',
-        waterDepthInches: null,
-        description: 'Large banyan tree branch fallen on side lane. Main road clear.',
-        latitude: lat - 0.012,
-        longitude: lon + 0.014,
-        locationName: 'North Ring Road',
-        reporterRole: 'Citizen Volunteer',
-        upvotes: 7,
-        createdAt: '25 mins ago',
-      ),
-      CitizenReportModel(
-        id: 'rep_3',
-        reportType: 'Hailstorm',
-        severity: 'Severe',
-        waterDepthInches: null,
-        description: 'Small hail pellets observed during sudden convective squall lasting 10 minutes.',
-        latitude: lat + 0.022,
-        longitude: lon - 0.018,
-        locationName: 'Agricultural Foothill Outskirts',
-        reporterRole: 'Progressive Farmer',
-        upvotes: 24,
-        createdAt: '42 mins ago',
-      ),
-    ];
+  // 15. ICAR-IMD Gramin Krishi Mausam Seva (GKMS) District Agromet Bulletin
+  Future<DistrictAgrometBulletinModel> getDistrictAgrometBulletin({
+    required double latitude,
+    required double longitude,
+    String? district,
+    String? state,
+    String language = 'en',
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final distKey = (district ?? 'loc').replaceAll(' ', '_');
+    final cacheKey = 'agromet_bulletin_${distKey}_${latitude.toStringAsFixed(2)}_${longitude.toStringAsFixed(2)}';
+
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/advisories/agromet-bulletin').replace(
+        queryParameters: {
+          'latitude': latitude.toString(),
+          'longitude': longitude.toString(),
+          if (district != null && district.isNotEmpty) 'district': district,
+          if (state != null && state.isNotEmpty) 'state': state,
+          'language': language,
+        },
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 12));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        // Cache successful response for offline resilience in rural fields
+        await prefs.setString(cacheKey, json.encode(data));
+        return DistrictAgrometBulletinModel.fromJson(data, isOffline: false);
+      }
+    } catch (e) {
+      debugPrint('Backend agromet bulletin fetch failed ($e). Attempting offline cache.');
+    }
+
+    // Try reading cached bulletin from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return DistrictAgrometBulletinModel.fromJson(cachedData, isOffline: true);
+      } catch (_) {}
+    }
+
+    // Fallback: build a direct local agromet bulletin conforming to ICAR-GKMS standards
+    return _buildDirectAgrometBulletin(latitude, longitude, district, state);
+  }
+
+  DistrictAgrometBulletinModel _buildDirectAgrometBulletin(
+    double lat,
+    double lon,
+    String? district,
+    String? state,
+  ) {
+    final resolvedDistrict = (district != null && district.isNotEmpty)
+        ? district
+        : (lat >= 8.0 && lat <= 13.5 ? 'Kanniyakumari' : 'District Agromet Zone');
+    final resolvedState = (state != null && state.isNotEmpty)
+        ? state
+        : (lat >= 8.0 && lat <= 13.5 ? 'Tamil Nadu' : 'India');
+
+    final now = DateTime.now();
+    final issueStr = '${now.day.toString().padLeft(2, '0')}-${_monthName(now.month)}-${now.year}';
+    final validUntil = now.add(const Duration(days: 5));
+    final validUntilStr = '${validUntil.day.toString().padLeft(2, '0')}-${_monthName(validUntil.month)}-${validUntil.year}';
+
+    final fiveDay = List.generate(5, (i) {
+      final dayDate = now.add(Duration(days: i));
+      return AgrometDayForecastModel(
+        date: '${dayDate.year}-${dayDate.month.toString().padLeft(2, '0')}-${dayDate.day.toString().padLeft(2, '0')}',
+        dayName: _dayOfWeekName(dayDate.weekday),
+        rainfallMm: 0.0,
+        tempMaxC: 33.0,
+        tempMinC: 23.5,
+        humidityMorningPct: 75,
+        humidityEveningPct: 50,
+        windSpeedKmh: 12.0,
+        windDirectionCardinal: 'NW',
+        cloudCoverOcta: 2,
+      );
+    });
+
+    return DistrictAgrometBulletinModel(
+      district: resolvedDistrict,
+      state: resolvedState,
+      bulletinNumber: 'GKMS/${resolvedState.substring(0, 3).toUpperCase()}/${resolvedDistrict.replaceAll(" ", "").substring(0, 4).toUpperCase()}/${now.year}/LOCAL',
+      issueDate: issueStr,
+      validFrom: issueStr,
+      validUntil: validUntilStr,
+      amfuCenter: 'ICAR-IMD District Agromet Field Unit (AMFU), $resolvedDistrict',
+      synopticWeatherSummary: 'Dry and warm weather conditions expected across $resolvedDistrict over the 5-day bulletin cycle. Surface winds moderate.',
+      fiveDayForecast: fiveDay,
+      generalFarmAdvisories: [
+        '💧 SCHEDULED IRRIGATION: Maintain regular scheduled irrigation in standing crops. Irrigate during early morning or evening hours.',
+        '🚜 SPRAY WINDOW: Spraying of crop protection chemicals can be carried out during calm morning hours (07:00–09:30 AM).',
+        '🌾 SOIL CONSERVATION: Perform inter-cultivation and mulching in broad-spaced crops to minimize evaporative moisture loss.',
+      ],
+      cropAdvisories: [
+        CropAgrometAdvisoryModel(
+          cropName: 'Paddy / Rice',
+          stage: 'Tillering / Panicle Initiation',
+          riskLevel: 'Normal',
+          advisoryText: 'Maintain 3 to 5 cm water level in fields. Keep drainage channels open.',
+          pestDiseaseAdvisory: 'Monitor for Stem Borer and Leaf Folder moths in field corners.',
+          recommendedIntervention: 'Apply Neem Seed Kernel Extract (NSKE 5%) if egg masses observed.',
+        ),
+        CropAgrometAdvisoryModel(
+          cropName: 'Cotton / Pulses',
+          stage: 'Vegetative / Square Formation',
+          riskLevel: 'Normal',
+          advisoryText: 'Avoid waterlogging at root zones. Perform weed hoeing.',
+          pestDiseaseAdvisory: 'Scout lower leaf surface for Whitefly and Jassids.',
+          recommendedIntervention: 'Spray Yellow Sticky Traps @ 5-6 per acre for early pest detection.',
+        ),
+        CropAgrometAdvisoryModel(
+          cropName: 'Horticulture & Vegetables',
+          stage: 'Flowering & Fruiting',
+          riskLevel: 'Normal',
+          advisoryText: 'Harvest marketable fruits and vegetables in the morning.',
+          pestDiseaseAdvisory: 'Warm sunny intervals favor Fruit Borer.',
+          recommendedIntervention: 'Install Pheromone traps @ 4-5 per acre for monitoring.',
+        ),
+      ],
+      livestockAdvisories: [
+        LivestockAdvisoryModel(
+          livestockType: 'Dairy Cattle & Buffaloes',
+          riskLevel: 'Normal',
+          managementAdvice: 'Provide clean, cool drinking water ad libitum. Ensure cross-ventilation in sheds. Feed green fodder with dry roughage in 3:1 ratio.',
+          vaccinationOrDiseaseAlert: 'Ensure routine FMD and HS vaccinations are up to date.',
+        ),
+        LivestockAdvisoryModel(
+          livestockType: 'Poultry',
+          riskLevel: 'Normal',
+          managementAdvice: 'Keep litter dry and well aerated (2-inch depth). Provide electrolytes in water during warm afternoons.',
+          vaccinationOrDiseaseAlert: 'Administer Lasota strain vaccine for Newcastle Disease (ND).',
+        ),
+      ],
+      provenanceDisclaimer: 'Offline Synthesized Agromet Guidance (ICAR-IMD GKMS Standards). Connect to network to refresh official district bulletin.',
+      isOfflineCached: true,
+    );
+  }
+
+  String _monthName(int month) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return months[(month - 1).clamp(0, 11)];
+  }
+
+  String _dayOfWeekName(int weekday) {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    return days[(weekday - 1).clamp(0, 6)];
+  }
+
+  // 16. Multi-Model NWP Ensemble Comparison (ECMWF IFS, NOAA GFS, DWD ICON)
+  Future<MultiModelComparisonModel> getMultiModelComparison({
+    required double latitude,
+    required double longitude,
+    String locationName = 'Location',
+    int days = 5,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'nwp_comparison_${latitude.toStringAsFixed(2)}_${longitude.toStringAsFixed(2)}_$days';
+
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/weather/multi-model-comparison').replace(
+        queryParameters: {
+          'latitude': latitude.toString(),
+          'longitude': longitude.toString(),
+          'location_name': locationName,
+          'days': days.toString(),
+        },
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 12));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return MultiModelComparisonModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend NWP comparison fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached NWP comparison from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return MultiModelComparisonModel.fromJson(cachedData);
+      } catch (_) {}
+    }
+
+    return MultiModelComparisonModel.unavailable(locationName);
+  }
+
+  // 17. IMD Warning Matrix & NDMA Standard Operating Procedures (SOPs)
+  Future<IMDSOPResponseModel> getImdSopMatrix({
+    String? hazard,
+    String? state,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'imd_sop_matrix_${hazard ?? "all"}_${state ?? "all"}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (hazard != null && hazard.isNotEmpty) queryParams['hazard'] = hazard;
+      if (state != null && state.isNotEmpty) queryParams['state'] = state;
+
+      final uri = Uri.parse('$baseUrl/api/v1/alerts/sop').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return IMDSOPResponseModel.fromJson(data, isOfflineCached: false);
+      }
+    } catch (e) {
+      debugPrint('Backend IMD SOP fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached SOP from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return IMDSOPResponseModel.fromJson(cachedData, isOfflineCached: true);
+      } catch (_) {}
+    }
+
+    // Complete offline resilience: return built-in offline SOP catalog
+    return IMDSOPResponseModel.defaultFallback();
+  }
+
+  // 18. ISRO MOSDAC Satellite Feeds & IMD Doppler Weather Radar Network
+  Future<SatelliteRadarOverviewModel> getSatelliteRadarOverview({
+    required double latitude,
+    required double longitude,
+    String locationName = 'Location',
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'sat_radar_overview_${latitude.toStringAsFixed(2)}_${longitude.toStringAsFixed(2)}';
+
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/weather/satellite-radar').replace(
+        queryParameters: {
+          'latitude': latitude.toString(),
+          'longitude': longitude.toString(),
+          'location_name': locationName,
+        },
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return SatelliteRadarOverviewModel.fromJson(data, isOfflineCached: false);
+      }
+    } catch (e) {
+      debugPrint('Backend satellite-radar fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return SatelliteRadarOverviewModel.fromJson(cachedData, isOfflineCached: true);
+      } catch (_) {}
+    }
+
+    // Return built-in offline fallback with official DWR stations catalog
+    return SatelliteRadarOverviewModel.defaultFallback(
+      latitude: latitude,
+      longitude: longitude,
+      locationName: locationName,
+    );
+  }
+
+  // 17. CWC River Basin & Dam Hydro-Telemetry
+  Future<CwcHydroOverviewModel> getCwcHydroOverview({
+    required double latitude,
+    required double longitude,
+    String locationName = 'Location',
+    String? basinName,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'cwc_hydro_${latitude.toStringAsFixed(2)}_${longitude.toStringAsFixed(2)}_${basinName ?? 'auto'}';
+
+    try {
+      final queryParams = {
+        'latitude': latitude.toString(),
+        'longitude': longitude.toString(),
+        'location_name': locationName,
+      };
+      if (basinName != null && basinName.isNotEmpty) {
+        queryParams['basin_name'] = basinName;
+      }
+      final uri = Uri.parse('$baseUrl/api/v1/hydro/overview').replace(queryParameters: queryParams);
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return CwcHydroOverviewModel.fromJson(data, isOfflineCached: false);
+      }
+    } catch (e) {
+      debugPrint('Backend CWC hydro-telemetry fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return CwcHydroOverviewModel.fromJson(cachedData, isOfflineCached: true);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return CwcHydroOverviewModel.defaultFallback(
+      latitude: latitude,
+      longitude: longitude,
+      locationName: locationName,
+      basinName: basinName ?? 'Ganga',
+    );
+  }
+
+  // 18. NCMRWF & IMD Sub-Divisional Monsoon Teleconnections & LRF
+  Future<MonsoonIntelligenceModel> getMonsoonIntelligence({
+    required double latitude,
+    required double longitude,
+    String locationName = 'Location',
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'monsoon_intel_${latitude.toStringAsFixed(2)}_${longitude.toStringAsFixed(2)}';
+
+    try {
+      final queryParams = {
+        'latitude': latitude.toString(),
+        'longitude': longitude.toString(),
+        'location_name': locationName,
+      };
+      final uri = Uri.parse('$baseUrl/api/v1/monsoon/teleconnections').replace(queryParameters: queryParams);
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return MonsoonIntelligenceModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend monsoon teleconnections fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return MonsoonIntelligenceModel.fromJson(cachedData);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return MonsoonIntelligenceModel.defaultFallback(
+      latitude: latitude,
+      longitude: longitude,
+      locationName: locationName,
+    );
+  }
+
+  // 19. IITM SAFAR & IMD AQEWS Multi-Pollutant & Atmospheric Dispersion
+  Future<SafarAirQualityModel> getSafarAirQuality({
+    required double latitude,
+    required double longitude,
+    String locationName = 'Location',
+    String? cityCode,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey =
+        'safar_aq_${latitude.toStringAsFixed(2)}_${longitude.toStringAsFixed(2)}_${cityCode ?? 'auto'}';
+
+    try {
+      final queryParams = {
+        'latitude': latitude.toString(),
+        'longitude': longitude.toString(),
+        'location_name': locationName,
+      };
+      if (cityCode != null && cityCode.isNotEmpty) {
+        queryParams['city_code'] = cityCode;
+      }
+      final uri = Uri.parse('$baseUrl/api/v1/air-quality/safar').replace(queryParameters: queryParams);
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return SafarAirQualityModel.fromJson(data, isOfflineCached: false);
+      }
+    } catch (e) {
+      debugPrint('Backend SAFAR air quality fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return SafarAirQualityModel.fromJson(cachedData, isOfflineCached: true);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return SafarAirQualityModel.defaultFallback(
+      latitude: latitude,
+      longitude: longitude,
+      locationName: locationName,
+      cityCode: cityCode ?? 'delhi',
+    );
+  }
+
+  // 20. IMD RSMC Tropical Cyclone Track, Storm Surge & Dvorak T-Number Intensity
+  Future<CycloneTrackerResponseModel> getCycloneTrackerData({
+    double? latitude,
+    double? longitude,
+    String? systemId,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey =
+        'cyclone_tracker_${latitude?.toStringAsFixed(2) ?? 'all'}_${longitude?.toStringAsFixed(2) ?? 'all'}_${systemId ?? 'default'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      if (systemId != null && systemId.isNotEmpty) queryParams['system_id'] = systemId;
+
+      final uri = Uri.parse('$baseUrl/api/v1/alerts/cyclone-tracker').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return CycloneTrackerResponseModel.fromJson(data, isOffline: false);
+      }
+    } catch (e) {
+      debugPrint('Backend cyclone tracker fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return CycloneTrackerResponseModel.fromJson(cachedData, isOffline: true);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return CycloneTrackerResponseModel.defaultFallback();
   }
 }
+
+
+
+
+

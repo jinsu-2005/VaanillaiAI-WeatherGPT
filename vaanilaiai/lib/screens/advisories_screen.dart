@@ -10,6 +10,8 @@ import '../services/api_service.dart';
 import '../theme/app_colors.dart';
 import '../widgets/spray_suitability_gauge.dart';
 import '../widgets/travel_risk_gauge.dart';
+import 'agromet_bulletin_screen.dart';
+import 'marine_ocean_screen.dart';
 
 class AdvisoriesScreen extends StatefulWidget {
   const AdvisoriesScreen({super.key});
@@ -191,6 +193,98 @@ class _AdvisoriesScreenState extends State<AdvisoriesScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 0. Official GKMS District Bulletin Banner
+          Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isDark
+                    ? [const Color(0xFF132D23), const Color(0xFF0F221B)]
+                    : [const Color(0xFFDCFCE7), const Color(0xFFF0FDF4)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isDark ? const Color(0xFF166534) : const Color(0xFF86EFAC),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.alertGreen.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.description_rounded, color: AppColors.alertGreen, size: 20),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Official District Agromet Bulletin',
+                            style: TextStyle(
+                              color: isDark ? Colors.white : const Color(0xFF14532D),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            'ICAR - IMD Gramin Krishi Mausam Seva (GKMS)',
+                            style: TextStyle(
+                              color: isDark ? const Color(0xFF86EFAC) : const Color(0xFF166534),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  '5-day meteorological forecast matrix, crop phenology protection, and animal husbandry guidance for your district.',
+                  style: TextStyle(
+                    color: isDark ? const Color(0xFFD1D5DB) : const Color(0xFF1F2937),
+                    fontSize: 12,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.alertGreen,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const AgrometBulletinScreen()),
+                      );
+                    },
+                    icon: const Icon(Icons.menu_book_rounded, size: 18),
+                    label: const Text(
+                      'Read Full District Bulletin',
+                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           // 1. Spray Suitability Gauge
           SpraySuitabilityGauge(advisory: agri),
           const SizedBox(height: 16),
@@ -483,13 +577,77 @@ class _AdvisoriesScreenState extends State<AdvisoriesScreen>
     final textSecondary = AppColors.textSecondaryC(isDark);
     final textTertiary = AppColors.textTertiaryC(isDark);
 
-    if (marine == null && _isLoadingMarine) {
-      return Center(child: SpinKitPulse(color: AppColors.brandBlue, size: 40));
+    if (_isLoadingMarine) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(48),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SpinKitPulse(color: AppColors.brandBlue, size: 40),
+              const SizedBox(height: 16),
+              Text(
+                'Checking ocean state & coastal warnings…',
+                style: TextStyle(color: textSecondary, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
-    final waveHeight = marine?.significantWaveHeightM ?? 1.2;
-    final seaCondition = marine?.seaCondition ?? 'Moderate';
-    final isSafe = marine?.deepSeaNavigationSafe ?? true;
+    if (marine == null || marine.dataUnavailable) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppColors.brandBlue.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.waves_rounded,
+                    color: AppColors.brandBlue, size: 48),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Marine Advisory Unavailable',
+                style: TextStyle(
+                    color: textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                marine?.fishermenWarningText ??
+                    'Ocean and marine state forecasts are unavailable for ${weatherProvider.locationName}. Inland locations do not have coastal marine feeds. Check with local port authorities before sea ventures.',
+                style: TextStyle(color: textSecondary, fontSize: 13),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.brandBlue,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Check Marine Data'),
+                onPressed: _fetchMarineAdvisory,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final waveHeight = marine.significantWaveHeightM;
+    final seaCondition = marine.seaCondition;
+    final isSafe = marine.deepSeaNavigationSafe;
     final conditionColor = isSafe ? AppColors.alertGreen : AppColors.alertRed;
 
     return SingleChildScrollView(
@@ -497,8 +655,84 @@ class _AdvisoriesScreenState extends State<AdvisoriesScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 0. Dedicated INCOIS Ocean State & Kallakkadal Early Warning Hub Banner
+          InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => MarineOceanScreen(
+                    initialLat: weatherProvider.latitude,
+                    initialLon: weatherProvider.longitude,
+                    initialLocationName: weatherProvider.locationName,
+                  ),
+                ),
+              );
+            },
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF0D3B66), Color(0xFF1E5B99)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0D3B66).withValues(alpha: 0.25),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.waves_rounded, color: Colors.white, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              'INCOIS Ocean State Hub',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            SizedBox(width: 6),
+                            Icon(Icons.open_in_new_rounded, color: Colors.white70, size: 14),
+                          ],
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'Kallakkadal Swell Surge • 3-Tier Fleet Directives • Port Signals',
+                          style: TextStyle(color: Colors.white70, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right_rounded, color: Colors.white),
+                ],
+              ),
+            ),
+          ),
+
           // 1. Port Warning Signal Banner
-          if (marine != null && marine.portWarningSignalNumber > 0)
+          if (marine.portWarningSignalNumber > 0)
             Container(
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(14),
@@ -546,7 +780,7 @@ class _AdvisoriesScreenState extends State<AdvisoriesScreen>
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      marine?.coastalRegion ?? 'Coastal Waters',
+                      marine.coastalRegion,
                       style: TextStyle(color: textSecondary, fontSize: 13, fontWeight: FontWeight.w600),
                     ),
                     Container(
@@ -575,7 +809,7 @@ class _AdvisoriesScreenState extends State<AdvisoriesScreen>
                           style: TextStyle(color: textPrimary, fontSize: 28, fontWeight: FontWeight.w800, height: 1.0),
                         ),
                         Text(
-                          'Significant Wave Height (Swell: ${marine?.swellPeriodSeconds ?? 9.0}s)',
+                          'Significant Wave Height (Swell: ${marine.swellPeriodSeconds}s)',
                           style: TextStyle(color: textSecondary, fontSize: 12),
                         ),
                       ],
@@ -598,11 +832,11 @@ class _AdvisoriesScreenState extends State<AdvisoriesScreen>
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildMarineMetric('Coastal Wind', '${marine?.coastalWindKnots ?? 12} kts', '${marine?.coastalWindKmH ?? 22} km/h', textPrimary, textSecondary, textTertiary),
+                _buildMarineMetric('Coastal Wind', '${marine.coastalWindKnots} kts', '${marine.coastalWindKmH} km/h', textPrimary, textSecondary, textTertiary),
                 Container(width: 1, height: 44, color: borderColor),
-                _buildMarineMetric('SST (Ocean)', '${marine?.seaSurfaceTemperatureC ?? 28.5}°C', 'Surface Temp', textPrimary, textSecondary, textTertiary),
+                _buildMarineMetric('SST (Ocean)', '${marine.seaSurfaceTemperatureC}°C', 'Surface Temp', textPrimary, textSecondary, textTertiary),
                 Container(width: 1, height: 44, color: borderColor),
-                _buildMarineMetric('Chlorophyll', '${marine?.chlorophyllAMgM3 ?? 1.4}', 'mg/m³ Bio-density', textPrimary, textSecondary, textTertiary),
+                _buildMarineMetric('Chlorophyll', '${marine.chlorophyllAMgM3}', 'mg/m³ Bio-density', textPrimary, textSecondary, textTertiary),
               ],
             ),
           ),
@@ -646,7 +880,7 @@ class _AdvisoriesScreenState extends State<AdvisoriesScreen>
                           children: [
                             const Text('PFZ VECTOR', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.teal)),
                             const SizedBox(height: 4),
-                            Text(marine?.pfzBearingDirection ?? '145° SE', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                            Text(marine.pfzBearingDirection, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
                           ],
                         ),
                       ),
@@ -664,7 +898,7 @@ class _AdvisoriesScreenState extends State<AdvisoriesScreen>
                           children: [
                             const Text('DISTANCE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.teal)),
                             const SizedBox(height: 4),
-                            Text('${marine?.pfzDistanceNauticalMiles ?? 18.5} NM Offshore', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+                            Text('${marine.pfzDistanceNauticalMiles} NM Offshore', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
                           ],
                         ),
                       ),
@@ -673,7 +907,7 @@ class _AdvisoriesScreenState extends State<AdvisoriesScreen>
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'PFZ status: ${marine?.potentialFishingZoneStatus ?? "Chlorophyll belt detected."}',
+                  'PFZ status: ${marine.potentialFishingZoneStatus}',
                   style: TextStyle(fontSize: 12, color: textSecondary),
                 ),
               ],
@@ -707,14 +941,14 @@ class _AdvisoriesScreenState extends State<AdvisoriesScreen>
                 const SizedBox(height: 14),
                 _buildMarineTile(
                   isSafe ? '✅ Safe for Coastal Operations' : '🚨 High Risk — Stay Ashore',
-                  marine?.fishermenWarningText ?? 'Safe for traditional and motorized craft up to 50 nautical miles.',
+                  marine.fishermenWarningText,
                   isSafe ? AppColors.alertGreen : AppColors.alertRed,
                   textPrimary,
                   textSecondary,
                 ),
                 _buildMarineTile(
                   'Tide Timings & Heights',
-                  'High tide: ${marine?.tideHighTime ?? "01:45 PM"} (${marine?.tideHighHeightM ?? 1.6} m) • Low tide: ${marine?.tideLowTime ?? "07:20 PM"} (${marine?.tideLowHeightM ?? 0.4} m)',
+                  'High tide: ${marine.tideHighTime} (${marine.tideHighHeightM} m) • Low tide: ${marine.tideLowTime} (${marine.tideLowHeightM} m)',
                   AppColors.brandBlue,
                   textPrimary,
                   textSecondary,

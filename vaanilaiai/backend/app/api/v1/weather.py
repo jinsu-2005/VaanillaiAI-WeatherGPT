@@ -4,7 +4,11 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.schemas.weather import WeatherForecastResponse, CurrentWeather, HourlyForecastItem
+from app.schemas.nwp import MultiModelComparisonResponse
+from app.schemas.satellite_radar import SatelliteRadarOverviewResponse
 from app.services.weather_service import weather_service
+from app.services.nwp_service import nwp_service
+from app.services.satellite_radar_service import satellite_radar_service
 
 router = APIRouter()
 
@@ -64,3 +68,45 @@ async def get_hourly_forecast(
         db=db
     )
     return forecast.hourly[:hours]
+ 
+ 
+@router.get(
+    "/multi-model-comparison",
+    response_model=MultiModelComparisonResponse,
+    summary="Get Multi-Model NWP Ensemble Comparison",
+)
+async def get_multi_model_comparison(
+    latitude: float = Query(..., ge=-90.0, le=90.0, description="Latitude in decimal degrees"),
+    longitude: float = Query(..., ge=-180.0, le=180.0, description="Longitude in decimal degrees"),
+    location_name: str = Query("Location", description="Location name"),
+    days: int = Query(5, ge=3, le=7, description="Number of forecast days to compare (3 to 7)"),
+):
+    """Compare ECMWF IFS, NOAA GFS, and DWD ICON model forecasts, spread, and consensus."""
+    return await nwp_service.get_multi_model_comparison(
+        lat=latitude,
+        lon=longitude,
+        location_name=location_name,
+        days=days,
+    )
+
+
+@router.get(
+    "/satellite-radar",
+    response_model=SatelliteRadarOverviewResponse,
+    summary="Get ISRO MOSDAC Satellite and IMD Doppler Weather Radar Feeds",
+)
+async def get_satellite_radar(
+    latitude: float = Query(..., ge=-90.0, le=90.0, description="Latitude in decimal degrees"),
+    longitude: float = Query(..., ge=-180.0, le=180.0, description="Longitude in decimal degrees"),
+    location_name: str = Query("Location", description="Location name"),
+):
+    """Retrieve authentic IMD Doppler Weather Radar (DWR) station telemetry,
+    coverage zones (100km nowcast vs 250km surveillance), nearest radar distance,
+    and ISRO MOSDAC INSAT-3DR multispectral satellite channels (CTT, WV, VIS, RGB)."""
+    return satellite_radar_service.get_overview(
+        lat=latitude,
+        lon=longitude,
+        location_name=location_name,
+    )
+
+

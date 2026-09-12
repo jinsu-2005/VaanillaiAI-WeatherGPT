@@ -1,4 +1,4 @@
-"""India Meteorological Department (IMD) & NDMA Sachet Disaster Warnings Provider."""
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
@@ -6,6 +6,7 @@ import httpx
 from app.core.config import settings
 from app.providers.base import BaseAlertProvider
 from app.schemas.alert import DisasterAlertResponse, AlertSeverity
+from app.services.cap_alert_service import cap_alert_service
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +54,44 @@ class IMDAlertProvider(BaseAlertProvider):
                             centroid = str(item.get("centroid") or "")
                             if parsed and self._matches_filter(parsed, lat, lon, district, state, centroid):
                                 alerts.append(parsed)
-        except Exception as e:
-            logger.warning(f"Could not reach NDMA/IMD live feed: {e}. Checking local and simulated advisory warnings.")
 
-        # If no external alert is fetched or live feed is offline, ensure system logic is tested and resilient
+                    # Enrich matched alerts with authentic OASIS CAP XML via ETag caching
+                    enrich_tasks = [
+                        self._enrich_alert_with_cap(client, alert)
+                        for alert in alerts[:8]
+                        if alert.alert_id
+                    ]
+                    if enrich_tasks:
+                        enriched_results = await asyncio.gather(*enrich_tasks, return_exceptions=True)
+                        for i, res in enumerate(enriched_results):
+                            if isinstance(res, DisasterAlertResponse) and res is not None:
+                                alerts[i] = res
+        except Exception as e:
+            logger.warning(f"Could not reach NDMA/IMD live feed: {e}. Checking local and fallback advisory warnings.")
+
         return alerts
+
+    async def _enrich_alert_with_cap(
+        self,
+        client: httpx.AsyncClient,
+        alert: DisasterAlertResponse
+    ) -> DisasterAlertResponse:
+        """Enrich a candidate alert with full OASIS CAP-XML using ETag 304 caching."""
+        if not alert.alert_id:
+            return alert
+        try:
+            xml_text = await cap_alert_service.fetch_cap_xml(alert.alert_id, client=client)
+            if xml_text:
+                detailed = cap_alert_service.parse_cap_xml(xml_text, identifier_fallback=alert.alert_id)
+                if detailed:
+                    if not detailed.district and alert.district:
+                        detailed.district = alert.district
+                    if not detailed.state and alert.state:
+                        detailed.state = alert.state
+                    return detailed
+        except Exception as e:
+            logger.debug(f"Could not enrich alert {alert.alert_id} with CAP XML: {e}")
+        return alert
 
     def _parse_cap_alert(self, item: dict) -> Optional[DisasterAlertResponse]:
         try:
@@ -120,7 +154,10 @@ class IMDAlertProvider(BaseAlertProvider):
                 effective_from=effective_from,
                 expires_at=expires_at,
                 is_active=True,
-                color_hex=SEVERITY_COLORS.get(sev, "#E53E3E")
+                color_hex=SEVERITY_COLORS.get(sev, "#E53E3E"),
+                cap_identifier=alert_id,
+                polygon_url=f"{settings.NDMA_SACHET_POLYGON_URL}?identifier={alert_id}",
+                sender_org=item.get("alert_source"),
             )
         except Exception as e:
             logger.error(f"Error parsing CAP alert item: {e}")

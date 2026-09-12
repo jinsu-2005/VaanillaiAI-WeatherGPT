@@ -20,6 +20,12 @@ class LocationSearchResult(BaseModel):
     elevation: Optional[float] = None
     is_village: bool = False
     display_name: str = Field(..., description="Formatted full location string")
+    imd_station_id: Optional[str] = Field(None, description="Official IMD / WMO Station Index (e.g. 43278)")
+
+
+class IMDStationEntry(BaseModel):
+    station_id: str = Field(..., description="Official IMD / WMO Station Index ID")
+    city_name: str = Field(..., description="City or observatory name")
 
 
 class SavedLocationCreate(BaseModel):

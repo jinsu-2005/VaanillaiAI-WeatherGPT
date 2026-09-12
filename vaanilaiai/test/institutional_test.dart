@@ -126,6 +126,30 @@ void main() {
       expect(model.cloudGenus, 'Cumulonimbus Calvus');
       expect(model.rainOnsetEstimatedMinutes, 25);
       expect(model.squallRiskLevel, 'High');
+      expect(model.dataUnavailable, false);
+    });
+
+    test('MarineAdvisoryModel.unavailable factory test', () {
+      final model = MarineAdvisoryModel.unavailable('Rameshwaram Coast');
+      expect(model.locationName, 'Rameshwaram Coast');
+      expect(model.dataUnavailable, true);
+      expect(model.seaCondition, 'Data Unavailable');
+      expect(model.deepSeaNavigationSafe, false);
+    });
+
+    test('LightningAlertModel.unavailable factory test', () {
+      final model = LightningAlertModel.unavailable('Madurai');
+      expect(model.locationName, 'Madurai');
+      expect(model.dataUnavailable, true);
+      expect(model.threatLevel, 'Unknown');
+      expect(model.strikesLast30m, 0);
+    });
+
+    test('SkyAnalysisModel.unavailable factory test', () {
+      final model = SkyAnalysisModel.unavailable('Salem');
+      expect(model.dataUnavailable, true);
+      expect(model.cloudGenus, 'Unknown');
+      expect(model.confidenceScore, 0.0);
     });
   });
 }

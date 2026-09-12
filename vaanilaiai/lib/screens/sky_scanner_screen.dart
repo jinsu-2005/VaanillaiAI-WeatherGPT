@@ -89,11 +89,9 @@ class _SkyScannerScreenState extends State<SkyScannerScreen>
     } catch (e) {
       if (mounted) {
         setState(() {
+          _analysisResult = SkyAnalysisModel.unavailable(weather.locationName);
           _isAnalyzing = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Vision analysis error: $e')),
-        );
       }
     }
   }
@@ -421,6 +419,10 @@ class _SkyScannerScreenState extends State<SkyScannerScreen>
   }
 
   Widget _buildAnalysisResultCard(BuildContext context, SkyAnalysisModel result) {
+    if (result.dataUnavailable) {
+      return _buildUnavailableState(context);
+    }
+
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final riskColor = _getRiskColor(result.squallRiskLevel);
 
@@ -616,6 +618,79 @@ class _SkyScannerScreenState extends State<SkyScannerScreen>
                 ],
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUnavailableState(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF161E31) : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: Colors.amber.withValues(alpha: 0.4),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.amber.withValues(alpha: 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.amber.withValues(alpha: 0.15),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.cloud_off_rounded,
+              color: Colors.amber,
+              size: 32,
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Sky Vision Diagnostics Unavailable',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Optical cloud classification could not be completed. The AI vision service is currently unreachable or timed out. Regional radar and satellite feeds remain active on the main dashboard.',
+            style: TextStyle(
+              fontSize: 12.5,
+              height: 1.4,
+              color: isDark ? Colors.white70 : const Color(0xFF475569),
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: _isAnalyzing
+                ? null
+                : () {
+                    final found = _presets.firstWhere((p) => p['title'] == _selectedPreset);
+                    _runAnalysis(found['base64']!);
+                  },
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: const Text('Retry Analysis'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.brandBlue,
+              side: const BorderSide(color: AppColors.brandBlue),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
         ],
       ),
     );

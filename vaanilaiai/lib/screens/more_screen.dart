@@ -10,7 +10,17 @@ import 'voice_weather_screen.dart';
 import 'settings_screen.dart';
 import 'advisories_screen.dart';
 import 'climate_screen.dart';
+import 'heat_stress_screen.dart';
 import 'auth_screen.dart';
+import 'agromet_bulletin_screen.dart';
+import 'urban_flood_screen.dart';
+import 'multi_model_nwp_screen.dart';
+import 'imd_sop_screen.dart';
+import 'lightning_safety_screen.dart';
+import 'marine_ocean_screen.dart';
+import 'river_basin_hydro_screen.dart';
+import 'monsoon_teleconnections_screen.dart';
+import 'cyclone_tracker_screen.dart';
 
 class MoreScreen extends StatelessWidget {
   final Function(int) onNavigateTab;
@@ -152,7 +162,7 @@ class MoreScreen extends StatelessWidget {
               [
                 _MenuItem(Icons.dashboard_rounded, 'Dashboard', accentBlue,
                     () => onNavigateTab(0)),
-                _MenuItem(Icons.map_rounded, 'Live Radar Map', accentBlue,
+                _MenuItem(Icons.satellite_alt_rounded, 'Satellite & Radar GIS Map', accentBlue,
                     () => onNavigateTab(1)),
                 _MenuItem(Icons.smart_toy_rounded, 'AI WeatherGPT', accentBlue,
                     () => onNavigateTab(2)),
@@ -177,6 +187,11 @@ class MoreScreen extends StatelessWidget {
                   Navigator.push(context,
                       MaterialPageRoute(builder: (_) => const AdvisoriesScreen()));
                 }),
+                _MenuItem(Icons.description_rounded, 'District Agromet Bulletin (GKMS)',
+                    AppColors.alertGreen, () {
+                  Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const AgrometBulletinScreen()));
+                }),
                 _MenuItem(Icons.trending_up_rounded, 'Climate Trends & 5Y Analysis',
                     AppColors.alertOrange, () {
                   Navigator.push(context,
@@ -191,6 +206,53 @@ class MoreScreen extends StatelessWidget {
                     AppColors.weatherRain, () {
                   Navigator.push(context,
                       MaterialPageRoute(builder: (_) => const RainfallHistoryScreen()));
+                }),
+                _MenuItem(Icons.whatshot_rounded, 'Heat Stress & Wet-Bulb Monitor',
+                    AppColors.alertOrange, () {
+                  Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const HeatStressScreen()));
+                }),
+                _MenuItem(Icons.water_damage_rounded, 'Urban Flood & Inundation Risk',
+                    AppColors.weatherRain, () {
+                  Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const UrbanFloodScreen()));
+                }),
+                _MenuItem(Icons.hub_rounded, 'NWP Multi-Model Ensemble',
+                    AppColors.brandBlue, () {
+                  Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const MultiModelNwpScreen()));
+                }),
+                _MenuItem(Icons.shield_outlined, 'IMD Warning Matrix & SOPs',
+                    AppColors.alertRed, () {
+                  Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const ImdSopScreen()));
+                }),
+                _MenuItem(Icons.flash_on_rounded, 'Damini Lightning & 30-30 Safety',
+                    AppColors.alertOrange, () {
+                  Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const LightningSafetyScreen()));
+                }),
+                _MenuItem(Icons.radar_rounded, 'MOSDAC Satellite & DWR Radar',
+                    Colors.cyan, () => onNavigateTab(1)),
+                _MenuItem(Icons.tsunami_rounded, 'INCOIS Marine & Kallakkadal Swell',
+                    Colors.indigoAccent, () {
+                  Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const MarineOceanScreen()));
+                }),
+                _MenuItem(Icons.water_rounded, 'CWC River Basin & Dam Telemetry',
+                    Colors.lightBlue, () {
+                  Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const RiverBasinHydroScreen()));
+                }),
+                _MenuItem(Icons.cyclone_rounded, 'Monsoon Teleconnections & LRF',
+                    Colors.cyanAccent, () {
+                  Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const MonsoonTeleconnectionsScreen()));
+                }),
+                _MenuItem(Icons.storm_rounded, 'IMD Cyclone & Surge Tracker',
+                    AppColors.alertRed, () {
+                  Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const CycloneTrackerScreen()));
                 }),
                 _MenuItem(Icons.wb_twilight_rounded, 'Sun & Moon Tracker',
                     AppColors.weatherSunny, () {

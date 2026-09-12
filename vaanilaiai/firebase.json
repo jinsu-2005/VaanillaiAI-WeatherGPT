@@ -15,5 +15,18 @@
   },
   "firestore": {
     "rules": "firestore.rules"
+  },
+  "auth": {
+    "providers": {
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "VaanilaiAI",
+        "authorizedRedirectUris": [
+          "https://vaanilai-ai.firebaseapp.com/__/auth/handler",
+          "http://localhost"
+        ],
+        "supportEmail": "jinsu.j2005@gmail.com"
+      }
+    }
   }
 }

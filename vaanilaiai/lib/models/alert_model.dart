@@ -14,6 +14,11 @@ class DisasterAlertModel {
   final String expiresAt;
   final bool isActive;
   final String colorHex;
+  final String? capIdentifier;
+  final String? polygonUrl;
+  final String? vernacularHeadline;
+  final String? vernacularLanguage;
+  final String? senderOrg;
 
   DisasterAlertModel({
     required this.alertId,
@@ -31,6 +36,11 @@ class DisasterAlertModel {
     required this.expiresAt,
     required this.isActive,
     required this.colorHex,
+    this.capIdentifier,
+    this.polygonUrl,
+    this.vernacularHeadline,
+    this.vernacularLanguage,
+    this.senderOrg,
   });
 
   factory DisasterAlertModel.fromJson(Map<String, dynamic> json) {
@@ -50,6 +60,11 @@ class DisasterAlertModel {
       expiresAt: json['expires_at'] ?? '',
       isActive: json['is_active'] ?? true,
       colorHex: json['color_hex'] ?? '#E53E3E',
+      capIdentifier: json['cap_identifier'],
+      polygonUrl: json['polygon_url'],
+      vernacularHeadline: json['vernacular_headline'],
+      vernacularLanguage: json['vernacular_language'],
+      senderOrg: json['sender_org'],
     );
   }
 }

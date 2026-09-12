@@ -1,3 +1,9 @@
+databases:
+  - name: vaanilai-postgres
+    databaseName: vaanilai
+    user: vaanilai_user
+    plan: free
+
 services:
   - type: web
     name: vaanilai-ai-backend
@@ -10,5 +16,13 @@ services:
         value: "False"
       - key: GEMINI_API_KEY
         sync: false
+      - key: GEMINI_API_KEYS
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        value: "https://vaanilai.ai,https://vaanilaiai.web.app,http://localhost:3000,http://localhost:8080"
       - key: DATABASE_URL
-        value: sqlite+aiosqlite:///./vaanilai.db
+        fromDatabase:
+          name: vaanilai-postgres
+          property: connectionString

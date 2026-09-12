@@ -7,6 +7,8 @@ from app.schemas.advisory import (
     MarineAdvisoryResponse,
     CropStageAdvisoryRequest,
     CropStageAdvisoryResponse,
+    DistrictAgrometBulletinResponse,
+    UrbanFloodRiskResponse,
 )
 from app.services.advisory_service import advisory_service
 
@@ -69,3 +71,39 @@ async def get_travel_advisory(
         location_name=location_name,
         district=district
     )
+
+
+@router.get("/agromet-bulletin", response_model=DistrictAgrometBulletinResponse, summary="Get District Agromet Bulletin (GKMS)")
+async def get_district_agromet_bulletin(
+    latitude: float = Query(..., ge=-90.0, le=90.0),
+    longitude: float = Query(..., ge=-180.0, le=180.0),
+    district: Optional[str] = Query(None),
+    state: Optional[str] = Query(None),
+    language: str = Query("en", description="Language code: en, ta, hi")
+):
+    """Retrieve official-aligned ICAR-IMD Gramin Krishi Mausam Seva (GKMS) 5-day District Agromet Bulletin."""
+    return await advisory_service.get_district_agromet_bulletin(
+        lat=latitude,
+        lon=longitude,
+        district=district,
+        state=state,
+        language=language
+    )
+
+
+@router.get("/urban-flood", response_model=UrbanFloodRiskResponse, summary="Get Urban Flood & Waterlogging Risk Index")
+async def get_urban_flood_risk(
+    latitude: float = Query(..., ge=-90.0, le=90.0),
+    longitude: float = Query(..., ge=-180.0, le=180.0),
+    location_name: str = Query("City Zone"),
+    district: Optional[str] = Query(None)
+):
+    """Retrieve micro-catchment waterlogging risk score, street pooling depth, underpass status, and commuter directives."""
+    return await advisory_service.get_urban_flood_risk(
+        lat=latitude,
+        lon=longitude,
+        location_name=location_name,
+        district=district
+    )
+
+

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:provider/provider.dart';
 import '../providers/weather_provider.dart';
 import '../providers/alert_provider.dart';
@@ -17,6 +16,11 @@ import '../widgets/lightning_threat_card.dart';
 import '../widgets/citizen_report_dialog.dart';
 import 'location_search_screen.dart';
 import 'sky_scanner_screen.dart';
+import 'heat_stress_screen.dart';
+import 'urban_flood_screen.dart';
+import 'multi_model_nwp_screen.dart';
+import '../widgets/skeleton_loading.dart';
+import '../widgets/data_source_indicator.dart';
 
 class HomeDashboardScreen extends StatefulWidget {
   final Function(int) onNavigateTab;
@@ -200,27 +204,7 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
         ],
       ),
       body: weatherProvider.isLoading && weatherProvider.forecast == null
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SpinKitPulse(color: accentBlue, size: 56),
-                  const SizedBox(height: 20),
-                  Text(
-                    'Loading high-resolution NWP models…',
-                    style: TextStyle(
-                        color: textSecondary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Fetching live IMD alerts & air quality data',
-                    style: TextStyle(color: AppColors.textTertiaryC(isDark), fontSize: 12),
-                  ),
-                ],
-              ),
-            )
+          ? const WeatherDashboardSkeleton()
           : weatherProvider.errorMessage != null &&
                   weatherProvider.forecast == null
               ? Center(
@@ -364,6 +348,16 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
           ),
           const SizedBox(height: 12),
         ],
+        if (weatherProvider.isStale) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: DataSourceIndicator(
+              lastUpdated: weatherProvider.lastFetchedAt,
+              dataSource: 'stale',
+              onRefresh: () => weatherProvider.fetchWeather(forceRefresh: true),
+            ),
+          ),
+        ],
         _buildInstitutionalActions(context, isDark),
         if (_lightningAlert != null)
           Padding(
@@ -401,8 +395,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                   DailyForecastList(daily: forecast.daily),
                   const SizedBox(height: 16),
                   _TelemetryCard(
-                    aqiValue: forecast.airQuality?.aqi ?? 28,
-                    aqiLabel: forecast.airQuality?.category ?? 'Good',
+                    aqiValue: forecast.airQuality?.aqi,
+                    aqiLabel: forecast.airQuality?.category,
                     uvIndex: curr.uvIndex,
                     pressure: curr.pressure,
                     surfaceColor: surfaceColor,
@@ -448,6 +442,16 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
           onLocationTap: () => Navigator.push(context,
               MaterialPageRoute(builder: (_) => const LocationSearchScreen())),
         ),
+        if (weatherProvider.isStale) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: DataSourceIndicator(
+              lastUpdated: weatherProvider.lastFetchedAt,
+              dataSource: 'stale',
+              onRefresh: () => weatherProvider.fetchWeather(forceRefresh: true),
+            ),
+          ),
+        ],
         _buildInstitutionalActions(context, isDark),
         if (_lightningAlert != null)
           LightningThreatCard(
@@ -464,11 +468,11 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
               Expanded(
                 child: _MetricPill(
                   icon: Icons.eco_rounded,
-                  iconColor: AppColors.alertGreen,
+                  iconColor: forecast.airQuality != null ? AppColors.alertGreen : textSecondary,
                   label: 'AQI',
-                  value: '${forecast.airQuality?.aqi ?? 28}',
-                  sub: forecast.airQuality?.category ?? 'Good',
-                  subColor: AppColors.alertGreen,
+                  value: forecast.airQuality?.aqi != null ? '${forecast.airQuality!.aqi}' : '--',
+                  sub: forecast.airQuality?.category ?? 'Unavailable',
+                  subColor: forecast.airQuality != null ? AppColors.alertGreen : textSecondary,
                   surfaceColor: surfaceColor,
                   borderColor: borderColor,
                   textPrimary: textPrimary,
@@ -630,6 +634,111 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                 ),
               ),
             ),
+            const SizedBox(width: 10),
+
+            // 4. Heat Stress & Wet-Bulb
+            InkWell(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const HeatStressScreen()),
+              ),
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.whatshot_rounded, color: AppColors.alertOrange, size: 18),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Heat Stress & Wet-Bulb',
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black87,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+
+            // 5. Urban Flood & Inundation Index
+            InkWell(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const UrbanFloodScreen()),
+              ),
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.water_damage_rounded, color: AppColors.weatherRain, size: 18),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Urban Flood & Inundation',
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black87,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+
+            // 6. NWP Multi-Model Ensemble
+            InkWell(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const MultiModelNwpScreen()),
+              ),
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.hub_rounded, color: AppColors.brandBlue, size: 18),
+                    const SizedBox(width: 6),
+                    Text(
+                      'NWP Models (ECMWF/GFS)',
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black87,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -639,8 +748,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
 
 // ── Reusable Telemetry Card (desktop right column) ────────────────────────────
 class _TelemetryCard extends StatelessWidget {
-  final int aqiValue;
-  final String aqiLabel;
+  final int? aqiValue;
+  final String? aqiLabel;
   final double uvIndex;
   final double pressure;
   final Color surfaceColor;
@@ -649,8 +758,8 @@ class _TelemetryCard extends StatelessWidget {
   final Color textSecondary;
 
   const _TelemetryCard({
-    required this.aqiValue,
-    required this.aqiLabel,
+    this.aqiValue,
+    this.aqiLabel,
     required this.uvIndex,
     required this.pressure,
     required this.surfaceColor,
@@ -698,9 +807,9 @@ class _TelemetryCard extends StatelessWidget {
             children: [
               _TelemetryTile(
                 label: 'Air Quality',
-                value: '$aqiValue AQI',
-                sub: aqiLabel,
-                color: AppColors.alertGreen,
+                value: aqiValue != null ? '$aqiValue AQI' : '--',
+                sub: aqiValue != null ? (aqiLabel ?? 'Good') : 'Unavailable',
+                color: aqiValue != null ? AppColors.alertGreen : textSecondary,
                 textPrimary: textPrimary,
                 textSecondary: textSecondary,
               ),

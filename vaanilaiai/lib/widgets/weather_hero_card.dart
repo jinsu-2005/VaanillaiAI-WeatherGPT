@@ -95,6 +95,26 @@ class _WeatherHeroCardState extends State<WeatherHeroCard>
     return AppColors.brandBlue;
   }
 
+  String _formatFreshness(DateTime? dt, String dataSource) {
+    if (dataSource == 'stale') {
+      if (dt == null) return 'Saved data';
+      final diff = DateTime.now().difference(dt);
+      if (diff.inMinutes < 60) return 'Saved data • ${diff.inMinutes}m ago';
+      return 'Saved data • ${diff.inHours}h ago';
+    }
+    if (dataSource == 'cached') {
+      if (dt == null) return 'Cached';
+      final diff = DateTime.now().difference(dt);
+      if (diff.inMinutes < 1) return 'Cached • just now';
+      return 'Cached • ${diff.inMinutes}m ago';
+    }
+    if (dt == null) return 'Live';
+    final diff = DateTime.now().difference(dt);
+    if (diff.inSeconds < 60) return 'Live • just now';
+    if (diff.inMinutes < 60) return 'Live • ${diff.inMinutes}m ago';
+    return 'Live • ${diff.inHours}h ago';
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -112,6 +132,12 @@ class _WeatherHeroCardState extends State<WeatherHeroCard>
 
     final iconColor = _getWeatherIconColor(curr.conditionIcon, curr.isDay);
     final atmosphericGlow = AppColors.atmosphericGlow(curr.conditionIcon, curr.isDay);
+
+    final beaconColor = widget.forecast.dataSource == 'stale'
+        ? AppColors.alertOrange
+        : (widget.forecast.dataSource == 'cached'
+            ? AppColors.brandBlueLight
+            : AppColors.alertGreen);
 
     return FadeTransition(
       opacity: _fadeAnim,
@@ -191,23 +217,39 @@ class _WeatherHeroCardState extends State<WeatherHeroCard>
                                   overflow: TextOverflow.ellipsis,
                                   maxLines: 1,
                                 ),
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.near_me_outlined,
-                                        size: 11, color: AppColors.brandBlue),
-                                    const SizedBox(width: 3),
-                                    Flexible(
-                                      child: Text(
-                                        'Live • Updated now',
-                                        style: TextStyle(
-                                            color: textSecondary, fontSize: 11),
-                                        overflow: TextOverflow.ellipsis,
-                                        maxLines: 1,
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        widget.forecast.dataSource == 'stale'
+                                            ? Icons.history_rounded
+                                            : (widget.forecast.dataSource == 'cached'
+                                                ? Icons.offline_pin_outlined
+                                                : Icons.near_me_outlined),
+                                        size: 11,
+                                        color: widget.forecast.dataSource == 'stale'
+                                            ? AppColors.alertOrange
+                                            : AppColors.brandBlue,
                                       ),
-                                    ),
-                                  ],
-                                ),
+                                      const SizedBox(width: 3),
+                                      Flexible(
+                                        child: Text(
+                                          _formatFreshness(
+                                            widget.forecast.lastFetchedAt,
+                                            widget.forecast.dataSource,
+                                          ),
+                                          style: TextStyle(
+                                            color: widget.forecast.dataSource == 'stale'
+                                                ? AppColors.alertOrange
+                                                : textSecondary,
+                                            fontSize: 11,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 1,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                               ],
                             ),
                           ),
@@ -241,11 +283,11 @@ class _WeatherHeroCardState extends State<WeatherHeroCard>
                           width: 7,
                           height: 7,
                           decoration: BoxDecoration(
-                            color: AppColors.alertGreen,
+                            color: beaconColor,
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color: AppColors.alertGreen.withValues(alpha: 0.6),
+                                color: beaconColor.withValues(alpha: 0.6),
                                 blurRadius: 6,
                                 spreadRadius: 1,
                               ),

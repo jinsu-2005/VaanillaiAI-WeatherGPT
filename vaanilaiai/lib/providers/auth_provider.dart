@@ -1,7 +1,9 @@
-import 'dart:math';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../services/auth_service.dart';
+import '../services/firestore_service.dart';
 
 enum UserRole {
   citizen,
@@ -39,33 +41,107 @@ class UserModel {
         return 'Citizen Meteorologist 🌤️';
     }
   }
+
+  static UserRole roleFromString(String? roleStr) {
+    if (roleStr == null) return UserRole.citizen;
+    for (final role in UserRole.values) {
+      if (role.name.toLowerCase() == roleStr.toLowerCase()) {
+        return role;
+      }
+    }
+    return UserRole.citizen;
+  }
 }
 
 class AuthProvider extends ChangeNotifier {
-  FirebaseAuth? get _firebaseAuth {
-    try {
-      return FirebaseAuth.instance;
-    } catch (_) {
-      return null;
-    }
-  }
+  final AuthService _authService = AuthService();
+  final FirestoreService _firestoreService = FirestoreService();
 
   UserModel? _user;
   bool _isLoading = false;
+  String? _errorMessage;
 
-  // Active OTP memory cache for email verification
-  String? _pendingOtpEmail;
-  String? _generatedOtp;
-  DateTime? _otpExpiresAt;
+  StreamSubscription<User?>? _authSubscription;
 
   UserModel? get user => _user;
   bool get isLoading => _isLoading;
   bool get isLoggedIn => _user != null && !_user!.isGuest;
   bool get isGuest => _user != null && _user!.isGuest;
-  String? get pendingOtpEmail => _pendingOtpEmail;
+  String? get errorMessage => _errorMessage;
+
+  AuthService get authService => _authService;
+  FirestoreService get firestoreService => _firestoreService;
 
   AuthProvider() {
-    _loadUserFromPrefs();
+    _initAuth();
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
+
+  void clearError() {
+    _errorMessage = null;
+    notifyListeners();
+  }
+
+  Future<void> _initAuth() async {
+    // 1. Initial quick load from local preferences
+    await _loadUserFromPrefs();
+
+    // 2. Subscribe to Firebase reactive auth state changes
+    _authSubscription = _authService.authStateChanges.listen((firebaseUser) async {
+      if (firebaseUser != null) {
+        await _syncFromFirebaseUser(firebaseUser);
+      } else {
+        // Only revert to guest if not already a designated guest
+        if (_user == null || !_user!.isGuest) {
+          _setGuestUser();
+        }
+      }
+    });
+  }
+
+  Future<void> _syncFromFirebaseUser(User firebaseUser, {UserRole? overrideRole}) async {
+    try {
+      final firestoreData = await _firestoreService.fetchUserProfile(firebaseUser.uid);
+
+      UserRole role = overrideRole ?? UserRole.citizen;
+      if (overrideRole == null && firestoreData != null && firestoreData['role'] != null) {
+        role = UserModel.roleFromString(firestoreData['role']);
+      } else if (overrideRole == null) {
+        final prefs = await SharedPreferences.getInstance();
+        final cachedRole = prefs.getString('auth_role');
+        if (cachedRole != null) {
+          role = UserModel.roleFromString(cachedRole);
+        }
+      }
+
+      final name = firebaseUser.displayName ??
+          firestoreData?['displayName'] ??
+          (firebaseUser.email != null ? firebaseUser.email!.split('@')[0] : 'Citizen');
+
+      _user = UserModel(
+        uid: firebaseUser.uid,
+        displayName: name,
+        email: firebaseUser.email ?? '',
+        photoUrl: firebaseUser.photoURL,
+        role: role,
+        isGuest: false,
+      );
+
+      // Persist to local preferences
+      await _persistUserToPrefs(_user!);
+
+      // Sync with Firestore
+      await _firestoreService.syncUserProfile(_user!);
+
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error syncing Firebase user: $e');
+    }
   }
 
   Future<void> _loadUserFromPrefs() async {
@@ -75,47 +151,28 @@ class AuthProvider extends ChangeNotifier {
       final name = prefs.getString('auth_name');
       final email = prefs.getString('auth_email');
       final roleStr = prefs.getString('auth_role');
+      final photoUrl = prefs.getString('auth_photo');
       final isGuest = prefs.getBool('auth_is_guest') ?? true;
 
-      if (uid != null && name != null) {
-        UserRole role = UserRole.citizen;
-        if (roleStr == 'farmer') role = UserRole.farmer;
-        if (roleStr == 'fisherman') role = UserRole.fisherman;
-        if (roleStr == 'disasterManager') role = UserRole.disasterManager;
-
+      if (uid != null && name != null && !isGuest) {
         _user = UserModel(
           uid: uid,
           displayName: name,
           email: email ?? '',
-          role: role,
-          isGuest: isGuest,
+          photoUrl: photoUrl,
+          role: UserModel.roleFromString(roleStr),
+          isGuest: false,
         );
       } else {
-        _user = UserModel(
-          uid: 'guest_${DateTime.now().millisecondsSinceEpoch}',
-          displayName: 'Guest Citizen',
-          email: 'guest@vaanilai.ai',
-          role: UserRole.citizen,
-          isGuest: true,
-        );
+        _setGuestUser();
       }
-      notifyListeners();
     } catch (_) {
-      _user = UserModel(
-        uid: 'guest_local',
-        displayName: 'Guest Citizen',
-        email: '',
-        role: UserRole.citizen,
-        isGuest: true,
-      );
-      notifyListeners();
+      _setGuestUser();
     }
+    notifyListeners();
   }
 
-  Future<void> signInAsGuest() async {
-    _isLoading = true;
-    notifyListeners();
-
+  void _setGuestUser() {
     _user = UserModel(
       uid: 'guest_${DateTime.now().millisecondsSinceEpoch}',
       displayName: 'Guest Citizen',
@@ -123,196 +180,141 @@ class AuthProvider extends ChangeNotifier {
       role: UserRole.citizen,
       isGuest: true,
     );
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('auth_uid', _user!.uid);
-    await prefs.setString('auth_name', _user!.displayName);
-    await prefs.setBool('auth_is_guest', true);
-
-    _isLoading = false;
     notifyListeners();
   }
 
-  // 1. Google Sign-In with Firebase Auth
+  Future<void> _persistUserToPrefs(UserModel user) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('auth_uid', user.uid);
+    await prefs.setString('auth_name', user.displayName);
+    await prefs.setString('auth_email', user.email);
+    await prefs.setString('auth_role', user.role.name);
+    if (user.photoUrl != null) {
+      await prefs.setString('auth_photo', user.photoUrl!);
+    } else {
+      await prefs.remove('auth_photo');
+    }
+    await prefs.setBool('auth_is_guest', user.isGuest);
+  }
+
+  // --- 1. Sign In with Google ---
   Future<bool> signInWithGoogle({UserRole role = UserRole.citizen}) async {
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
 
     try {
-      final auth = _firebaseAuth;
-      UserCredential? credential;
-      if (auth != null) {
-        if (kIsWeb) {
-          final GoogleAuthProvider googleProvider = GoogleAuthProvider();
-          googleProvider.addScope('email');
-          googleProvider.addScope('profile');
-          credential = await auth.signInWithPopup(googleProvider);
-        } else {
-          final GoogleAuthProvider googleProvider = GoogleAuthProvider();
-          credential = await auth.signInWithProvider(googleProvider);
-        }
+      final credential = await _authService.signInWithGoogle();
+      if (credential == null || credential.user == null) {
+        // User cancelled popup/prompt
+        _isLoading = false;
+        notifyListeners();
+        return false;
       }
 
-      final fbUser = credential?.user;
-      final name = fbUser?.displayName ?? (fbUser?.email != null ? fbUser!.email!.split('@')[0] : 'Citizen');
-      final uid = fbUser?.uid ?? 'google_${DateTime.now().millisecondsSinceEpoch}';
-      final email = fbUser?.email ?? 'user@gmail.com';
-      final photoUrl = fbUser?.photoURL;
-
-      _user = UserModel(
-        uid: uid,
-        displayName: name,
-        email: email,
-        photoUrl: photoUrl,
-        role: role,
-        isGuest: false,
-      );
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('auth_uid', _user!.uid);
-      await prefs.setString('auth_name', _user!.displayName);
-      await prefs.setString('auth_email', _user!.email);
-      await prefs.setString('auth_role', role.name);
-      await prefs.setBool('auth_is_guest', false);
-
+      await _syncFromFirebaseUser(credential.user!, overrideRole: role);
       _isLoading = false;
       notifyListeners();
       return true;
     } catch (e) {
-      final fallbackUid = 'google_user_${DateTime.now().millisecondsSinceEpoch % 10000}';
-      _user = UserModel(
-        uid: fallbackUid,
-        displayName: 'Google Citizen',
-        email: 'citizen@gmail.com',
-        role: role,
-        isGuest: false,
-      );
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('auth_uid', _user!.uid);
-      await prefs.setString('auth_name', _user!.displayName);
-      await prefs.setString('auth_email', _user!.email);
-      await prefs.setString('auth_role', role.name);
-      await prefs.setBool('auth_is_guest', false);
-
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    }
-  }
-
-  // 2. Email OTP Generator & Sender
-  Future<String> sendEmailOtp(String email) async {
-    _isLoading = true;
-    notifyListeners();
-
-    final cleanEmail = email.trim().toLowerCase();
-    _pendingOtpEmail = cleanEmail;
-
-    final random = Random();
-    final otpCode = (100000 + random.nextInt(900000)).toString();
-    _generatedOtp = otpCode;
-    _otpExpiresAt = DateTime.now().add(const Duration(minutes: 10));
-
-    await Future.delayed(const Duration(milliseconds: 700));
-
-    _isLoading = false;
-    notifyListeners();
-    return otpCode;
-  }
-
-  // 3. Email OTP Verification
-  Future<bool> verifyEmailOtp({
-    required String email,
-    required String otp,
-    required UserRole role,
-    String? displayName,
-  }) async {
-    _isLoading = true;
-    notifyListeners();
-
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    final cleanEmail = email.trim().toLowerCase();
-    final cleanOtp = otp.trim();
-
-    final isValid = (_generatedOtp != null && _generatedOtp == cleanOtp && _otpExpiresAt != null && DateTime.now().isBefore(_otpExpiresAt!)) ||
-        cleanOtp == '123456';
-
-    if (!isValid) {
+      _errorMessage = AuthService.getFriendlyErrorMessage(e);
       _isLoading = false;
       notifyListeners();
       return false;
     }
-
-    final name = (displayName != null && displayName.isNotEmpty)
-        ? displayName
-        : cleanEmail.split('@')[0];
-    final uid = 'otp_${cleanEmail.hashCode.abs()}';
-
-    _user = UserModel(
-      uid: uid,
-      displayName: name,
-      email: cleanEmail,
-      role: role,
-      isGuest: false,
-    );
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('auth_uid', _user!.uid);
-    await prefs.setString('auth_name', _user!.displayName);
-    await prefs.setString('auth_email', _user!.email);
-    await prefs.setString('auth_role', role.name);
-    await prefs.setBool('auth_is_guest', false);
-
-    _pendingOtpEmail = null;
-    _generatedOtp = null;
-    _isLoading = false;
-    notifyListeners();
-    return true;
   }
 
-  // 4. Email & Password Authentication
-  Future<bool> signInWithEmail({
+  // --- 2. Sign Up with Email & Password ---
+  Future<bool> signUpWithEmail({
     required String email,
     required String password,
     String? displayName,
     UserRole role = UserRole.citizen,
   }) async {
     _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
 
     try {
-      await Future.delayed(const Duration(milliseconds: 600));
-
-      final name = displayName?.isNotEmpty == true ? displayName! : email.split('@')[0];
-      final uid = 'user_${email.hashCode.abs()}';
-
-      _user = UserModel(
-        uid: uid,
-        displayName: name,
+      final credential = await _authService.signUpWithEmail(
         email: email,
-        role: role,
-        isGuest: false,
+        password: password,
+        displayName: displayName,
       );
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('auth_uid', _user!.uid);
-      await prefs.setString('auth_name', _user!.displayName);
-      await prefs.setString('auth_email', _user!.email);
-      await prefs.setString('auth_role', role.name);
-      await prefs.setBool('auth_is_guest', false);
+      if (credential.user == null) {
+        _errorMessage = 'Failed to create user account. Please try again.';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
 
+      await _syncFromFirebaseUser(credential.user!, overrideRole: role);
       _isLoading = false;
       notifyListeners();
       return true;
     } catch (e) {
+      _errorMessage = AuthService.getFriendlyErrorMessage(e);
       _isLoading = false;
       notifyListeners();
       return false;
     }
   }
 
+  // --- 3. Sign In with Email & Password ---
+  Future<bool> signInWithEmail({
+    required String email,
+    required String password,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final credential = await _authService.signInWithEmail(
+        email: email,
+        password: password,
+      );
+
+      if (credential.user == null) {
+        _errorMessage = 'Failed to sign in. Please verify your credentials.';
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      await _syncFromFirebaseUser(credential.user!);
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = AuthService.getFriendlyErrorMessage(e);
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // --- 4. Password Reset ---
+  Future<bool> sendPasswordReset(String email) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _authService.sendPasswordResetEmail(email);
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = AuthService.getFriendlyErrorMessage(e);
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // --- 5. Role Update ---
   Future<void> updateRole(UserRole newRole) async {
     if (_user == null) return;
     _user = UserModel(
@@ -326,12 +328,38 @@ class AuthProvider extends ChangeNotifier {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('auth_role', newRole.name);
+
+    if (!_user!.isGuest) {
+      await _firestoreService.updateUserRole(_user!.uid, newRole);
+    }
+
     notifyListeners();
   }
 
+  // --- 6. Guest Sign-In ---
+  Future<void> signInAsGuest() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    _setGuestUser();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('auth_uid', _user!.uid);
+    await prefs.setString('auth_name', _user!.displayName);
+    await prefs.setBool('auth_is_guest', true);
+
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  // --- 7. Sign Out ---
   Future<void> signOut() async {
+    _isLoading = true;
+    notifyListeners();
+
     try {
-      await _firebaseAuth?.signOut();
+      await _authService.signOut();
     } catch (_) {}
 
     final prefs = await SharedPreferences.getInstance();
@@ -339,15 +367,11 @@ class AuthProvider extends ChangeNotifier {
     await prefs.remove('auth_name');
     await prefs.remove('auth_email');
     await prefs.remove('auth_role');
+    await prefs.remove('auth_photo');
     await prefs.remove('auth_is_guest');
 
-    _user = UserModel(
-      uid: 'guest_${DateTime.now().millisecondsSinceEpoch}',
-      displayName: 'Guest Citizen',
-      email: '',
-      role: UserRole.citizen,
-      isGuest: true,
-    );
+    _setGuestUser();
+    _isLoading = false;
     notifyListeners();
   }
 }

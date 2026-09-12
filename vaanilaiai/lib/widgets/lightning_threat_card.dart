@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/lightning_model.dart';
 import '../theme/app_colors.dart';
+import '../screens/lightning_safety_screen.dart';
 
 class LightningThreatCard extends StatefulWidget {
   final LightningAlertModel alert;
@@ -276,10 +277,49 @@ class _LightningThreatCardState extends State<LightningThreatCard> with SingleTi
                       ),
                     ),
                   ],
+                  const SizedBox(height: 12),
+                  InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => LightningSafetyScreen(initialAlert: widget.alert),
+                        ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: threatColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: threatColor.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.radar_rounded, size: 16, color: threatColor),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Open 30-30 Safety Timer & Full Radar',
+                            style: TextStyle(
+                              color: threatColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(Icons.chevron_right_rounded, size: 16, color: threatColor),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ],
             ),
           ),
+
         ],
       ),
     );

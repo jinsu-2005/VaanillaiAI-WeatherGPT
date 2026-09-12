@@ -78,6 +78,11 @@ class AppColors {
       isDark ? darkOutline : lightOutline;
   static Color textPrimaryC(bool isDark) =>
       isDark ? darkTextPrimary : lightTextPrimary;
+  static const Color alertAmber = Color(0xFFF59E0B);      // Amber / Watch
+  static const Color accentTeal = Color(0xFF14B8A6);      // Teal Accent
+
+  static Color background(bool isDark) =>
+      isDark ? darkBackground : lightBackground;
   static Color textSecondaryC(bool isDark) =>
       isDark ? darkTextSecondary : lightTextSecondary;
   static Color textTertiaryC(bool isDark) =>

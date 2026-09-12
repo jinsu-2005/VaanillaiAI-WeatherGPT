@@ -22,6 +22,14 @@ class MonthlyClimateStatsModel {
       rainyDaysCount: json['rainy_days_count'] ?? 0,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'month_name': monthName,
+        'month_index': monthIndex,
+        'avg_temperature_c': avgTemperatureC,
+        'total_rainfall_mm': totalRainfallMm,
+        'rainy_days_count': rainyDaysCount,
+      };
 }
 
 class YearlyClimateStatsModel {
@@ -53,6 +61,15 @@ class YearlyClimateStatsModel {
           .toList(),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'year': year,
+        'annual_rainfall_mm': annualRainfallMm,
+        'annual_mean_temp_c': annualMeanTempC,
+        'max_temp_recorded_c': maxTempRecordedC,
+        'min_temp_recorded_c': minTempRecordedC,
+        'monthly_stats': monthlyStats.map((e) => e.toJson()).toList(),
+      };
 }
 
 class ClimateComparisonModel {
@@ -67,6 +84,7 @@ class ClimateComparisonModel {
   final double rainfallChangePercent;
   final double temperatureDifferenceC;
   final String climateSummary;
+  final bool isOfflineCached;
 
   ClimateComparisonModel({
     required this.locationName,
@@ -80,9 +98,10 @@ class ClimateComparisonModel {
     required this.rainfallChangePercent,
     required this.temperatureDifferenceC,
     required this.climateSummary,
+    this.isOfflineCached = false,
   });
 
-  factory ClimateComparisonModel.fromJson(Map<String, dynamic> json) {
+  factory ClimateComparisonModel.fromJson(Map<String, dynamic> json, {bool isOfflineCached = false}) {
     return ClimateComparisonModel(
       locationName: json['location_name'] ?? '',
       latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
@@ -95,8 +114,23 @@ class ClimateComparisonModel {
       rainfallChangePercent: (json['rainfall_change_percent'] as num?)?.toDouble() ?? 0.0,
       temperatureDifferenceC: (json['temperature_difference_c'] as num?)?.toDouble() ?? 0.0,
       climateSummary: json['climate_summary'] ?? '',
+      isOfflineCached: isOfflineCached,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'location_name': locationName,
+        'latitude': latitude,
+        'longitude': longitude,
+        'year_1': year1,
+        'year_2': year2,
+        'year_1_stats': year1Stats.toJson(),
+        'year_2_stats': year2Stats.toJson(),
+        'rainfall_difference_mm': rainfallDifferenceMm,
+        'rainfall_change_percent': rainfallChangePercent,
+        'temperature_difference_c': temperatureDifferenceC,
+        'climate_summary': climateSummary,
+      };
 }
 
 class ClimateTrendModel {
@@ -110,6 +144,7 @@ class ClimateTrendModel {
   final double rainfallTrendSlope;
   final double warmingTrendCPerDecade;
   final String trendDescription;
+  final bool isOfflineCached;
 
   ClimateTrendModel({
     required this.locationName,
@@ -122,9 +157,10 @@ class ClimateTrendModel {
     required this.rainfallTrendSlope,
     required this.warmingTrendCPerDecade,
     required this.trendDescription,
+    this.isOfflineCached = false,
   });
 
-  factory ClimateTrendModel.fromJson(Map<String, dynamic> json) {
+  factory ClimateTrendModel.fromJson(Map<String, dynamic> json, {bool isOfflineCached = false}) {
     return ClimateTrendModel(
       locationName: json['location_name'] ?? '',
       latitude: (json['latitude'] as num?)?.toDouble() ?? 0.0,
@@ -138,6 +174,20 @@ class ClimateTrendModel {
       rainfallTrendSlope: (json['rainfall_trend_slope'] as num?)?.toDouble() ?? 0.0,
       warmingTrendCPerDecade: (json['warming_trend_c_per_decade'] as num?)?.toDouble() ?? 0.0,
       trendDescription: json['trend_description'] ?? '',
+      isOfflineCached: isOfflineCached,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'location_name': locationName,
+        'latitude': latitude,
+        'longitude': longitude,
+        'start_year': startYear,
+        'end_year': endYear,
+        'multi_year_stats': multiYearStats.map((e) => e.toJson()).toList(),
+        'average_annual_rainfall_mm': averageAnnualRainfallMm,
+        'rainfall_trend_slope': rainfallTrendSlope,
+        'warming_trend_c_per_decade': warmingTrendCPerDecade,
+        'trend_description': trendDescription,
+      };
 }

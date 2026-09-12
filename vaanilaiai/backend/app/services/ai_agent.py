@@ -39,27 +39,59 @@ CORE PRINCIPLES (ZERO HALLUCINATION & CLEAN FORMATTING):
 
 
 class ConversationalAIAgent:
-    """Conversational AI agent that orchestrates meteorological tools with Gemini."""
+    """Conversational AI agent that orchestrates meteorological tools with Gemini and handles key/model failover."""
 
     def __init__(self):
-        self.gemini_client = None
-        self._init_client()
+        self._key_index = 0
+        self._key_cooldowns: Dict[str, float] = {}
+        self._clients: Dict[str, Any] = {}
+        self._init_clients()
 
-    def _init_client(self):
-        if settings.GEMINI_API_KEY:
-            try:
-                from google import genai
-                self.gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY)
-                return self.gemini_client
-            except Exception as e:
-                logger.warning(f"Could not initialize google-genai client: {e}")
-                return None
-        return None
+    def _init_clients(self):
+        keys = settings.get_api_keys()
+        for k in keys:
+            if k not in self._clients:
+                try:
+                    from google import genai
+                    self._clients[k] = genai.Client(api_key=k)
+                except Exception as e:
+                    logger.warning(f"Could not initialize google-genai client for key {k[:8]}...: {e}")
 
-    def _get_client(self):
-        if self.gemini_client is None:
-            return self._init_client()
-        return self.gemini_client
+    def get_client(self, api_key: Optional[str] = None):
+        """Return healthy Gemini client, rotating through the pool if needed."""
+        keys = settings.get_api_keys()
+        if not keys:
+            return None
+
+        if api_key and api_key in self._clients:
+            return self._clients[api_key]
+
+        import time
+        now = time.time()
+        for _ in range(len(keys)):
+            k = keys[self._key_index % len(keys)]
+            if now >= self._key_cooldowns.get(k, 0):
+                if k not in self._clients:
+                    self._init_clients()
+                return self._clients.get(k)
+            self._key_index = (self._key_index + 1) % len(keys)
+
+        # Fallback to first configured client
+        k = keys[0]
+        if k not in self._clients:
+            self._init_clients()
+        return self._clients.get(k)
+
+    def mark_key_quota_exhausted(self, api_key: str, cooldown_seconds: float = 60.0):
+        """Mark an API key as rate-limited/exhausted and advance active key index."""
+        import time
+        self._key_cooldowns[api_key] = time.time() + cooldown_seconds
+        keys = settings.get_api_keys()
+        if api_key in keys:
+            idx = keys.index(api_key)
+            self._key_index = (idx + 1) % len(keys)
+            next_k = keys[self._key_index]
+            logger.warning(f"[API KEY FAILOVER] Key {api_key[:8]}... hit quota/rate limit. Switching to key {next_k[:8]}... (cooldown: {cooldown_seconds}s)")
 
     def clean_markdown(self, text: str) -> str:
         """Strip messy repetitive asterisks and clean formatting."""
@@ -228,45 +260,53 @@ class ConversationalAIAgent:
         if not loc_name:
             loc_name = "Nagercoil"
 
-        # Try live Gemini models down the free priority ladder
-        client = self._get_client()
-        if client and settings.GEMINI_API_KEY:
+        # Try live Gemini models down the tier ladder with dual API key failover
+        keys = settings.get_api_keys()
+        if keys:
             models_to_try: List[str] = []
-            if settings.GEMINI_MODEL and settings.GEMINI_MODEL not in models_to_try:
-                models_to_try.append(settings.GEMINI_MODEL)
-            if settings.GEMINI_FALLBACK_MODEL and settings.GEMINI_FALLBACK_MODEL not in models_to_try:
-                models_to_try.append(settings.GEMINI_FALLBACK_MODEL)
-            for m in settings.AVAILABLE_FREE_MODELS:
-                if m not in models_to_try:
-                    models_to_try.append(m)
+            for candidate in [settings.GEMINI_MODEL, settings.GEMINI_FALLBACK_MODEL] + settings.AVAILABLE_FREE_MODELS:
+                if candidate and candidate not in models_to_try:
+                    models_to_try.append(candidate)
 
             for model_name in models_to_try:
-                try:
-                    ai_resp = await self._run_gemini_agent(
-                        query=query,
-                        lang=lang,
-                        lat=lat,
-                        lon=lon,
-                        loc_name=loc_name,
-                        session_id=session_id,
-                        model_name=model_name,
-                        client=client,
-                        db=db
-                    )
-                    await self._persist_chat(
-                        db=db,
-                        session_id=session_id,
-                        query=query,
-                        resp_text=ai_resp.response_text,
-                        lang=lang,
-                        loc_name=loc_name,
-                        tools_used=ai_resp.tools_used,
-                        citations=ai_resp.citations
-                    )
-                    return ai_resp
-                except Exception as e:
-                    logger.warning(f"Model {model_name} failed: {e}. Trying next available free model.")
-                    continue
+                # Try all available API keys in rotation before switching model
+                for key_attempt in range(len(keys)):
+                    active_key = keys[(self._key_index + key_attempt) % len(keys)]
+                    client = self.get_client(api_key=active_key)
+                    if not client:
+                        continue
+                    try:
+                        ai_resp = await self._run_gemini_agent(
+                            query=query,
+                            lang=lang,
+                            lat=lat,
+                            lon=lon,
+                            loc_name=loc_name,
+                            session_id=session_id,
+                            model_name=model_name,
+                            client=client,
+                            db=db
+                        )
+                        await self._persist_chat(
+                            db=db,
+                            session_id=session_id,
+                            query=query,
+                            resp_text=ai_resp.response_text,
+                            lang=lang,
+                            loc_name=loc_name,
+                            tools_used=ai_resp.tools_used,
+                            citations=ai_resp.citations
+                        )
+                        return ai_resp
+                    except Exception as e:
+                        err_str = str(e).lower()
+                        is_quota = any(q in err_str for q in ["429", "quota", "resource_exhausted", "limit", "rate", "503", "unavailable"])
+                        if is_quota:
+                            self.mark_key_quota_exhausted(active_key, cooldown_seconds=60.0)
+                            logger.warning(f"[FAILOVER] Key {active_key[:8]}... rate-limited on {model_name}. Switching to next key/model...")
+                        else:
+                            logger.warning(f"[FAILOVER] Model {model_name} with key {active_key[:8]}... error: {e}.")
+                        continue
 
         # Fallback to Grounded Deterministic Intelligence Engine
         ai_resp = await self._run_grounded_engine(query, lang, lat, lon, loc_name, session_id, db)

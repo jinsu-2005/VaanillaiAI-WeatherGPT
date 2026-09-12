@@ -11,13 +11,24 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+def normalize_database_url(url: str) -> str:
+    """Normalize PostgreSQL URLs for asyncpg driver."""
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif url.startswith("postgresql://") and not url.startswith("postgresql+asyncpg://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return url
+
+
+db_url = normalize_database_url(settings.DATABASE_URL)
+
 # Connect args for SQLite if used
 connect_args = {}
-if settings.DATABASE_URL.startswith("sqlite"):
+if db_url.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
 
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    db_url,
     echo=settings.DEBUG,
     connect_args=connect_args,
     future=True,

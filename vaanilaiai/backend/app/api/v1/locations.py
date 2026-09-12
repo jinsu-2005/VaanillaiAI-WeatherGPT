@@ -3,10 +3,19 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
-from app.schemas.location import LocationSearchResult, SavedLocationCreate, SavedLocationResponse
+from app.schemas.location import LocationSearchResult, SavedLocationCreate, SavedLocationResponse, IMDStationEntry
 from app.services.location_service import location_service
 
 router = APIRouter()
+
+
+@router.get("/imd-stations", response_model=List[IMDStationEntry], summary="Search Official IMD/WMO Station Catalog")
+async def get_imd_stations(
+    q: Optional[str] = Query(None, description="Optional city name or station ID filter"),
+    limit: int = Query(20, ge=1, le=100)
+):
+    """Retrieve official IMD / WMO station IDs across 697 Indian cities."""
+    return location_service.find_imd_stations(query=q or "", limit=limit)
 
 
 @router.get("/search", response_model=List[LocationSearchResult], summary="Search Indian Places")

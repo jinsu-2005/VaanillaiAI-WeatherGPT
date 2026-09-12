@@ -233,6 +233,10 @@ class WeatherForecastModel {
   final AirQualityModel? airQuality;
   final List<DisasterAlertModel> activeWarnings;
   final String? uncertaintyNotes;
+  /// When this data was fetched (client-side timestamp).
+  final DateTime? lastFetchedAt;
+  /// Source label: 'live', 'cached', 'forecast_model', 'estimated', 'unavailable'
+  final String dataSource;
 
   WeatherForecastModel({
     required this.locationName,
@@ -247,6 +251,8 @@ class WeatherForecastModel {
     this.airQuality,
     required this.activeWarnings,
     this.uncertaintyNotes,
+    this.lastFetchedAt,
+    this.dataSource = 'live',
   });
 
   factory WeatherForecastModel.fromJson(Map<String, dynamic> json) {
@@ -269,6 +275,31 @@ class WeatherForecastModel {
           .map((e) => DisasterAlertModel.fromJson(e as Map<String, dynamic>))
           .toList(),
       uncertaintyNotes: json['uncertainty_notes'],
+      lastFetchedAt: DateTime.now(),
+      dataSource: json['data_source'] ?? 'live',
+    );
+  }
+
+  /// Creates a copy with updated metadata (e.g. marking as cached).
+  WeatherForecastModel copyWith({
+    String? dataSource,
+    DateTime? lastFetchedAt,
+  }) {
+    return WeatherForecastModel(
+      locationName: locationName,
+      district: district,
+      state: state,
+      latitude: latitude,
+      longitude: longitude,
+      elevation: elevation,
+      current: current,
+      hourly: hourly,
+      daily: daily,
+      airQuality: airQuality,
+      activeWarnings: activeWarnings,
+      uncertaintyNotes: uncertaintyNotes,
+      lastFetchedAt: lastFetchedAt ?? this.lastFetchedAt,
+      dataSource: dataSource ?? this.dataSource,
     );
   }
 }
