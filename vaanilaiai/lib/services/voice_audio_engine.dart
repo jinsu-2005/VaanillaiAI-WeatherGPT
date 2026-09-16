@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'web_audio_helper.dart';
 
-/// Native Android AudioRecord (16kHz PCM Mic) and AudioTrack (24kHz PCM Speaker) bridge.
+/// Cross-platform Voice Audio Engine:
+/// - Android: Native AudioRecord (16kHz PCM Mic) and AudioTrack (24kHz PCM Speaker) bridge.
+/// - Web: Web Audio API (16kHz PCM getUserMedia Mic) and Web Audio Buffer playback.
 class VoiceAudioEngine {
   static const MethodChannel _control = MethodChannel('com.vaanilaiai.app/voice_control');
   static const EventChannel _micStream = EventChannel('com.vaanilaiai.app/voice_mic');
@@ -12,7 +15,9 @@ class VoiceAudioEngine {
   StreamSubscription? _playbackStateSub;
 
   Future<bool> requestRecordPermission() async {
-    if (kIsWeb) return true;
+    if (kIsWeb) {
+      return await WebAudioHelper.requestPermission();
+    }
     try {
       final res = await _control.invokeMethod<bool>('requestRecordPermission');
       return res ?? false;
@@ -23,7 +28,9 @@ class VoiceAudioEngine {
   }
 
   Future<bool> hasRecordPermission() async {
-    if (kIsWeb) return true;
+    if (kIsWeb) {
+      return await WebAudioHelper.hasPermission();
+    }
     try {
       final res = await _control.invokeMethod<bool>('hasRecordPermission');
       return res ?? false;
@@ -33,7 +40,9 @@ class VoiceAudioEngine {
   }
 
   Future<bool> startRecording(void Function(Uint8List chunk) onPcmChunk) async {
-    if (kIsWeb) return false;
+    if (kIsWeb) {
+      return await WebAudioHelper.startRecording(onPcmChunk);
+    }
     try {
       await _micSub?.cancel();
       _micSub = _micStream.receiveBroadcastStream().listen((dynamic event) {
@@ -55,7 +64,10 @@ class VoiceAudioEngine {
   }
 
   Future<void> stopRecording() async {
-    if (kIsWeb) return;
+    if (kIsWeb) {
+      WebAudioHelper.stopRecording();
+      return;
+    }
     try {
       await _micSub?.cancel();
       _micSub = null;
@@ -66,7 +78,10 @@ class VoiceAudioEngine {
   }
 
   Future<void> playPcmChunk(Uint8List pcmChunk) async {
-    if (kIsWeb) return;
+    if (kIsWeb) {
+      WebAudioHelper.playPcmChunk(pcmChunk);
+      return;
+    }
     try {
       await _control.invokeMethod('playPcmChunk', pcmChunk);
     } catch (e) {
@@ -75,7 +90,10 @@ class VoiceAudioEngine {
   }
 
   Future<void> flushPlayback() async {
-    if (kIsWeb) return;
+    if (kIsWeb) {
+      WebAudioHelper.flushPlayback();
+      return;
+    }
     try {
       await _control.invokeMethod('flushPlayback');
     } catch (e) {
@@ -84,7 +102,10 @@ class VoiceAudioEngine {
   }
 
   Future<void> stopPlayback() async {
-    if (kIsWeb) return;
+    if (kIsWeb) {
+      WebAudioHelper.stopPlayback();
+      return;
+    }
     try {
       await _control.invokeMethod('stopPlayback');
     } catch (e) {
@@ -93,7 +114,10 @@ class VoiceAudioEngine {
   }
 
   void listenPlaybackState(void Function(String state) onStateChanged) {
-    if (kIsWeb) return;
+    if (kIsWeb) {
+      WebAudioHelper.listenPlaybackState(onStateChanged);
+      return;
+    }
     _playbackStateSub?.cancel();
     _playbackStateSub = _playbackStateStream.receiveBroadcastStream().listen((dynamic event) {
       if (event is String) {
@@ -105,7 +129,9 @@ class VoiceAudioEngine {
   }
 
   Future<Map<String, dynamic>> getAudioRouteInfo() async {
-    if (kIsWeb) return {'route': 'Web Audio', 'speakerOn': true};
+    if (kIsWeb) {
+      return WebAudioHelper.getAudioRouteInfo();
+    }
     try {
       final res = await _control.invokeMapMethod<String, dynamic>('getAudioRoute');
       return res ?? {};
