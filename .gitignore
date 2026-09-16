@@ -42,6 +42,7 @@ htmlcov/
 .pub/
 build/
 coverage/
+.firebase/
 
 # iOS / macOS build artifacts
 ios/Flutter/ephemeral/

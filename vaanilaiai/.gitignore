@@ -28,6 +28,7 @@ venv/
 .pub/
 build/
 coverage/
+.firebase/
 
 # iOS / Android
 ios/Flutter/ephemeral/

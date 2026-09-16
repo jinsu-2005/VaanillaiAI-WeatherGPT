@@ -5,6 +5,17 @@
 
 ---
 
+## 🌐 Live Production Deployments
+
+| Component | Platform | Live URL |
+| :--- | :--- | :--- |
+| **Web Application (Primary)** | Firebase Hosting | [https://vaanilai-ai.web.app](https://vaanilai-ai.web.app) |
+| **Web Application (Mirror)** | Firebase Hosting | [https://vaanilai-ai.firebaseapp.com](https://vaanilai-ai.firebaseapp.com) |
+| **Backend API (Swagger Docs)** | Render Cloud | [https://vaanilai-ai-backend.onrender.com/docs](https://vaanilai-ai-backend.onrender.com/docs) |
+| **Backend Health Check** | Render Cloud | [https://vaanilai-ai-backend.onrender.com/api/v1/health](https://vaanilai-ai-backend.onrender.com/api/v1/health) |
+
+---
+
 ## 1. System Architecture
 
 ```mermaid
