@@ -57,6 +57,8 @@ ios/.symlinks/
 
 # Android build artifacts
 android/.gradle/
+android/.kotlin/
+.kotlin/
 android/app/debug/
 android/app/profile/
 android/app/release/
