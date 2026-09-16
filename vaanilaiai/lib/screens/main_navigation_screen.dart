@@ -4,8 +4,11 @@ import '../providers/auth_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/alert_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/network_provider.dart';
 import '../theme/app_colors.dart';
 import '../widgets/language_selector_sheet.dart';
+import '../widgets/network_status_badge.dart';
+import '../widgets/offline_status_banner.dart';
 import 'home_dashboard_screen.dart';
 import 'weather_map_screen.dart';
 import 'chat_screen.dart';
@@ -44,6 +47,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final alertProvider = Provider.of<AlertProvider>(context);
     final themeProvider = Provider.of<ThemeProvider>(context);
     final authProvider = Provider.of<AuthProvider>(context);
+    final networkProvider = Provider.of<NetworkProvider>(context);
 
     final isDesktop = MediaQuery.of(context).size.width >= 900;
 
@@ -158,6 +162,25 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     ),
                   ),
 
+                  // Network Connectivity telemetry
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    child: Row(
+                      children: [
+                        const NetworkStatusBadge(),
+                        const Spacer(),
+                        Text(
+                          networkProvider.connectionType,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
                   Divider(height: 1, color: borderColor),
 
                   // User Profile & Controls
@@ -262,6 +285,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                                     themeProvider.toggleTheme(!isDark),
                               ),
                             ),
+                            const NetworkStatusBadge(compact: true),
                             InkWell(
                               onTap: () {
                                 showModalBottomSheet(
@@ -303,9 +327,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
             // Main Content Area
             Expanded(
-              child: IndexedStack(
-                index: _currentIndex,
-                children: screens,
+              child: Column(
+                children: [
+                  const OfflineStatusBanner(),
+                  Expanded(
+                    child: IndexedStack(
+                      index: _currentIndex,
+                      children: screens,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -315,9 +346,27 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
     // ─── Mobile Layout with M3 NavigationBar ─────────────────────────────
     return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: screens,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            const OfflineStatusBanner(),
+            if (networkProvider.isOffline)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: NetworkStatusBadge(compact: true),
+                ),
+              ),
+            Expanded(
+              child: IndexedStack(
+                index: _currentIndex,
+                children: screens,
+              ),
+            ),
+          ],
+        ),
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(

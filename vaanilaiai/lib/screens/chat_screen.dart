@@ -5,8 +5,10 @@ import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/weather_provider.dart';
+import '../providers/network_provider.dart';
 import '../theme/app_colors.dart';
 import '../widgets/chat_bubble.dart';
+import '../widgets/network_status_badge.dart';
 import 'voice_weather_screen.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -30,6 +32,20 @@ class _ChatScreenState extends State<ChatScreen> {
     {'emoji': '📅', 'label': '7-Day Outlook', 'query': 'Give me a 7-day weather outlook summary.'},
     {'emoji': '⛵', 'label': 'Marine Safety', 'query': 'Is it safe for fishing along the coast today?'},
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+      final weatherProvider = Provider.of<WeatherProvider>(context, listen: false);
+      final localeProvider = Provider.of<LocaleProvider>(context, listen: false);
+      chatProvider.ensurePersonalizedGreeting(
+        locationName: weatherProvider.locationName,
+        language: localeProvider.currentLanguage,
+      );
+    });
+  }
 
   @override
   void dispose() {
@@ -77,6 +93,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final chatProvider = Provider.of<ChatProvider>(context);
     final weatherProvider = Provider.of<WeatherProvider>(context);
+    final networkProvider = Provider.of<NetworkProvider>(context);
 
     final surfaceColor = AppColors.surface(isDark);
     final borderColor = AppColors.border(isDark);
@@ -121,6 +138,8 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         ),
         actions: [
+          const NetworkStatusBadge(compact: true),
+          const SizedBox(width: 4),
           IconButton(
             icon: Icon(Icons.mic_rounded, color: accentBlue),
             onPressed: () => Navigator.push(context,
@@ -209,6 +228,35 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
 
           const SizedBox(height: 8),
+
+          if (networkProvider.isOffline)
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.alertOrange.withValues(alpha: isDark ? 0.18 : 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: AppColors.alertOrange.withValues(alpha: 0.35),
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.wifi_off_rounded, size: 16, color: AppColors.alertOrange),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'WeatherGPT is offline. Saved chats are visible, but new AI queries require internet.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? const Color(0xFFFDBA74) : const Color(0xFF9A3412),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // Input Bar
           Container(

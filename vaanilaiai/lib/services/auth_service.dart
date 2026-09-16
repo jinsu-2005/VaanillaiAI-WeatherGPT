@@ -5,6 +5,10 @@ import 'package:google_sign_in/google_sign_in.dart';
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
+  // Web OAuth Client ID from google-services.json (client_type: 3)
+  static const String webClientId =
+      '380758138825-rtsanqlc5ae3ng65npj36pb8sfh74cnf.apps.googleusercontent.com';
+
   AuthService() {
     _initializeGoogleSignIn();
   }
@@ -12,7 +16,9 @@ class AuthService {
   void _initializeGoogleSignIn() {
     if (!kIsWeb) {
       try {
-        GoogleSignIn.instance.initialize();
+        GoogleSignIn.instance.initialize(
+          serverClientId: webClientId,
+        );
       } catch (e) {
         debugPrint('GoogleSignIn initialization error: $e');
       }
@@ -36,12 +42,26 @@ class AuthService {
       } else {
         final googleUser = await GoogleSignIn.instance.authenticate();
         final googleAuth = googleUser.authentication;
+        final idToken = googleAuth.idToken;
+        if (idToken == null) {
+          throw FirebaseAuthException(
+            code: 'missing-id-token',
+            message: 'Failed to retrieve Google ID token from Credential Manager.',
+          );
+        }
         final AuthCredential credential = GoogleAuthProvider.credential(
-          idToken: googleAuth.idToken,
+          idToken: idToken,
         );
 
         return await _auth.signInWithCredential(credential);
       }
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) {
+        debugPrint('Google Sign-In canceled by user.');
+        return null;
+      }
+      debugPrint('GoogleSignInException during Sign-In: ${e.code} - ${e.description}');
+      rethrow;
     } on FirebaseAuthException catch (e) {
       debugPrint('Firebase Auth error during Google Sign-In: ${e.code} - ${e.message}');
       rethrow;

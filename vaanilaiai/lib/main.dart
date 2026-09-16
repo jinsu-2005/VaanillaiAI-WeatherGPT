@@ -12,6 +12,7 @@ import 'providers/advisory_provider.dart';
 import 'providers/climate_provider.dart';
 import 'providers/location_provider.dart';
 import 'providers/citizen_provider.dart';
+import 'providers/network_provider.dart';
 import 'theme/app_theme.dart';
 import 'screens/main_navigation_screen.dart';
 
@@ -30,6 +31,7 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => NetworkProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => LocaleProvider()),

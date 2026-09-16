@@ -32,6 +32,32 @@ class ChatProvider extends ChangeNotifier {
     );
   }
 
+  void ensurePersonalizedGreeting({
+    required String locationName,
+    required String language,
+  }) {
+    if (_messages.isEmpty || (_messages.length == 1 && _messages.first.intent == 'greeting')) {
+      _messages.clear();
+      final greeting = language == 'ta'
+          ? 'வணக்கம்! 🙏 நான் **வானிலைAI (WeatherGPT)**, உங்கள் நேரலை வானிலை உதவியாளர்.\n\n**$locationName** பகுதியில் இன்றைய வானிலை, மழை முன்னறிவிப்பு, புயல் எச்சரிக்கை, அல்லது பயிர் தெளிப்பு ஆலோசனைகள் குறித்து என்ன கேட்க விரும்புகிறீர்கள்?'
+          : language == 'hi'
+              ? 'नमस्ते! 🙏 मैं **VaanilaiAI (WeatherGPT)** हूँ, आपका मौसम सहायक।\n\n**$locationName** में आज के मौसम, वर्षा, चक्रवात चेतावनी या खेती संबंधी क्या जानकारी चाहिए?'
+              : 'Namaste & Vanakkam! 🙏 I am **VaanilaiAI (WeatherGPT)**, your real-time conversational meteorological assistant for India.\n\nAsk me anything about current weather in **$locationName**, rain predictions, cyclone warnings, farm spraying suitability, or travel safety!';
+
+      _messages.add(
+        ChatMessageModel(
+          role: 'assistant',
+          content: greeting,
+          language: language,
+          intent: 'greeting',
+          citations: ['India Meteorological Department (IMD)', 'High-Resolution NWP ECMWF Grid'],
+          toolsUsed: [],
+        ),
+      );
+      notifyListeners();
+    }
+  }
+
   Future<void> sendMessage(
     String text, {
     required String language,

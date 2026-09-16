@@ -20,6 +20,36 @@ import '../models/hydro_model.dart';
 import '../models/monsoon_model.dart';
 import '../models/safar_model.dart';
 import '../models/cyclone_model.dart';
+import '../models/fog_model.dart';
+import '../models/coldwave_model.dart';
+import '../models/pest_forewarning_model.dart';
+import '../models/avalanche_snow_model.dart';
+import '../models/convective_storm_model.dart';
+import '../models/drought_model.dart';
+import '../models/marine_heatwave_model.dart';
+import '../models/cloudburst_model.dart';
+import '../models/hazmat_model.dart';
+import '../models/forest_fire_model.dart';
+import '../models/heat_action_plan_model.dart';
+import '../models/tsunami_model.dart';
+import '../models/crop_water_stress_model.dart';
+import '../models/storm_surge_model.dart';
+import '../models/ocean_state_model.dart';
+import '../models/livestock_heat_stress_model.dart';
+import '../models/earthquake_model.dart';
+import '../models/solar_energy_model.dart';
+import '../models/lightning_cell_model.dart';
+import '../models/wind_energy_model.dart';
+import '../models/glof_model.dart';
+import '../models/oil_spill_model.dart';
+import '../models/urban_heat_island_model.dart';
+import '../models/potential_fishing_zone_model.dart';
+import '../models/extended_range_prediction_model.dart';
+import '../models/snowmelt_runoff_model.dart';
+import '../models/agri_storage_model.dart';
+import '../models/flash_drought_model.dart';
+import '../models/hydro_rating_model.dart';
+import '../models/saltwater_intrusion_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
@@ -556,13 +586,67 @@ class ApiService {
   }
 
   // 10. Dedicated Spoken Voice Interaction Endpoint
-  Future<ChatMessageModel> sendVoiceQuery({
+  Future<Map<String, dynamic>> initLiveVoiceSession({
+    String language = 'en',
+    double? latitude,
+    double? longitude,
+    String? locationName,
+    String? sessionId,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/v1/voice/init');
+    final payload = {
+      'language': language,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
+      if (locationName != null) 'location_name': locationName,
+      if (sessionId != null) 'session_id': sessionId,
+    };
+
+    try {
+      final response = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(payload),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        return json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      debugPrint('Live voice init error: $e. Falling back to local proactive briefing.');
+    }
+
+    final loc = locationName ?? 'Nagercoil';
+    final greeting = language == 'ta'
+        ? 'வணக்கம்! நான் வானிலைAI லைவ் (VaanilaiAI Live). $loc பகுதியில் தற்போதைய வானிலை ஆய்வு மற்றும் முன்னறிவிப்பு தகவல்களை வழங்க நான் தயார். என்ன கேட்க விரும்புகிறீர்கள்?'
+        : language == 'hi'
+            ? 'नमस्ते! मैं वानिलीएआई लाइव (VaanilaiAI Live) हूँ। $loc के वर्तमान मौसम और कृषि सलाह के लिए मैं उपस्थित हूँ। आज क्या जानकारी चाहिए?'
+            : 'Namaste! I am VaanilaiAI Live, your real-time conversational weather companion for $loc. What weather intelligence or travel plans can I assist you with today?';
+
+    return {
+      'session_id': sessionId ?? 'live-session-${DateTime.now().millisecondsSinceEpoch}',
+      'greeting_text': greeting,
+      'system_prompt': 'VaanilaiAI Live Gemini Engine',
+      'suggested_voice_prompts': [
+        'Will it rain tomorrow in $loc?',
+        'Is it safe for pesticide crop spraying today?',
+        'Check active cyclone and disaster warnings',
+        'Is coastal sea safe for fishing today?',
+        'Give me a 7-day weather outlook summary',
+      ],
+      'audio_base64': null,
+      'detected_language': language,
+    };
+  }
+
+  Future<Map<String, dynamic>> sendVoiceQueryDetailed({
     required String query,
     String? audioBase64,
     String language = 'en',
     double? latitude,
     double? longitude,
     String? locationName,
+    String? sessionId,
   }) async {
     final uri = Uri.parse('$baseUrl/api/v1/voice/query');
     final payload = {
@@ -572,6 +656,7 @@ class ApiService {
       if (latitude != null) 'latitude': latitude,
       if (longitude != null) 'longitude': longitude,
       if (locationName != null) 'location_name': locationName,
+      if (sessionId != null) 'session_id': sessionId,
     };
 
     try {
@@ -582,23 +667,61 @@ class ApiService {
       ).timeout(const Duration(seconds: 35));
 
       if (response.statusCode == 200) {
-        final data = json.decode(utf8.decode(response.bodyBytes));
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
         final chatResp = data['chat_response'];
+        ChatMessageModel msg;
         if (chatResp != null) {
-          return ChatMessageModel.fromJson(chatResp, role: 'assistant');
+          msg = ChatMessageModel.fromJson(chatResp, role: 'assistant');
+        } else {
+          msg = ChatMessageModel(
+            role: 'assistant',
+            content: 'Voice intelligence retrieved.',
+            language: language,
+          );
         }
+        return {
+          'message': msg,
+          'audio_base64': data['audio_base64'],
+          'transcribed_text': data['transcribed_text'] ?? query,
+        };
       }
     } catch (e) {
-      debugPrint('Backend voice query error: $e. Using standard conversational pipeline.');
+      debugPrint('Backend voice query error: $e.');
     }
 
-    return sendChatMessage(
+    final fallbackMsg = await sendChatMessage(
       query: query,
+      sessionId: sessionId,
       language: language,
       latitude: latitude,
       longitude: longitude,
       locationName: locationName,
     );
+
+    return {
+      'message': fallbackMsg,
+      'audio_base64': null,
+      'transcribed_text': query,
+    };
+  }
+
+  Future<ChatMessageModel> sendVoiceQuery({
+    required String query,
+    String? audioBase64,
+    String language = 'en',
+    double? latitude,
+    double? longitude,
+    String? locationName,
+  }) async {
+    final detailed = await sendVoiceQueryDetailed(
+      query: query,
+      audioBase64: audioBase64,
+      language: language,
+      latitude: latitude,
+      longitude: longitude,
+      locationName: locationName,
+    );
+    return detailed['message'] as ChatMessageModel;
   }
 
   Future<ChatMessageModel> _fetchDirectGeminiChat({
@@ -1921,7 +2044,1268 @@ Rules:
     // Fallback to calibrated offline baseline
     return CycloneTrackerResponseModel.defaultFallback();
   }
+
+  // 22. IMD FogPass & Highway/Aviation Low-Visibility Nowcasting
+  Future<FogNowcastResponseModel> getFogNowcastData({
+    double? latitude,
+    double? longitude,
+    String locationName = 'Indo-Gangetic Corridor',
+    String? stationId,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'fog_nowcast_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}_${stationId ?? 'default'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      queryParams['location_name'] = locationName;
+      if (stationId != null) queryParams['station_id'] = stationId;
+
+      final uri = Uri.parse('$baseUrl/api/v1/fog/nowcast').replace(
+        queryParameters: queryParams,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return FogNowcastResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend fog nowcast fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return FogNowcastResponseModel.fromJson(cachedData);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return FogNowcastResponseModel.defaultFallback(
+      location: locationName,
+      lat: latitude ?? 28.5665,
+      lon: longitude ?? 77.1031,
+    );
+  }
+
+  // 23. IMD Cold Wave & Ground Frost Agronomic Vulnerability Engine
+  Future<ColdWaveResponseModel> getColdWaveAssessment({
+    double? latitude,
+    double? longitude,
+    String? stationId,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'coldwave_assessment_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}_${stationId ?? 'default'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      if (stationId != null) queryParams['station_id'] = stationId;
+
+      final uri = Uri.parse('$baseUrl/api/v1/coldwave/assessment').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return ColdWaveResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend cold wave fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return ColdWaveResponseModel.fromJson(cachedData);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return ColdWaveResponseModel.defaultFallback();
+  }
+
+  // 24. IMD Agro-Climatic Zone Crop Pest & Disease Forewarning Engine
+  Future<PestForewarningResponseModel> getPestForewarningData({
+    double? latitude,
+    double? longitude,
+    int? zoneId,
+    double? temperatureC,
+    double? relativeHumidityPct,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'pest_forewarning_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}_${zoneId ?? 'default'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      if (zoneId != null) queryParams['zone_id'] = zoneId.toString();
+      if (temperatureC != null) queryParams['temperature_c'] = temperatureC.toString();
+      if (relativeHumidityPct != null) queryParams['relative_humidity_pct'] = relativeHumidityPct.toString();
+
+      final uri = Uri.parse('$baseUrl/api/v1/advisories/pest-forewarning').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return PestForewarningResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend pest forewarning fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return PestForewarningResponseModel.fromJson(cachedData);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return PestForewarningResponseModel.defaultFallback();
+  }
+
+  // 25. IMD & DGRE Himalayan Western Disturbance, Snowpack & Avalanche Early Warning Engine
+  Future<AvalancheSnowResponseModel> getAvalancheSnowAssessment({
+    double? latitude,
+    double? longitude,
+    String? sectorId,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'avalanche_snow_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}_${sectorId ?? 'default'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      if (sectorId != null) queryParams['sector_id'] = sectorId;
+
+      final uri = Uri.parse('$baseUrl/api/v1/avalanche/assessment').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return AvalancheSnowResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend avalanche assessment fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return AvalancheSnowResponseModel.fromJson(cachedData, isOfflineCached: true);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return AvalancheSnowResponseModel.defaultFallback();
+  }
+
+  // 26. IMD Severe Thunderstorm, Kalbaishakhi & Haboob Dust Storm Warning Engine
+  Future<ConvectiveStormResponseModel> getConvectiveStormAssessment({
+    double? latitude,
+    double? longitude,
+    String? hotspotId,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'convective_storm_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}_${hotspotId ?? 'default'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      if (hotspotId != null) queryParams['hotspot_id'] = hotspotId;
+
+      final uri = Uri.parse('$baseUrl/api/v1/alerts/convective-storm').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return ConvectiveStormResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend convective storm fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return ConvectiveStormResponseModel.fromJson(cachedData, isOfflineCached: true);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return ConvectiveStormResponseModel.defaultFallback();
+  }
+
+  // 27. IMD & CGWB Agricultural Drought, Soil Moisture Stress & Groundwater Vulnerability Engine
+  Future<AgriculturalDroughtResponseModel> getAgriculturalDroughtAssessment({
+    double? latitude,
+    double? longitude,
+    String? hotspotId,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'drought_assessment_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}_${hotspotId ?? 'default'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      if (hotspotId != null) queryParams['hotspot_id'] = hotspotId;
+
+      final uri = Uri.parse('$baseUrl/api/v1/advisories/drought-assessment').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return AgriculturalDroughtResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend drought assessment fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return AgriculturalDroughtResponseModel.fromJson(cachedData, isOfflineCached: true);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return AgriculturalDroughtResponseModel.defaultFallback();
+  }
+
+  // 28. INCOIS Marine Heatwave, Coral Bleaching & Coastal Sea Fog Warning Engine
+  Future<MarineHeatwaveResponseModel> getMarineHeatwaveAssessment({
+    double? latitude,
+    double? longitude,
+    String? sectorId,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'marine_heatwave_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}_${sectorId ?? 'default'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      if (sectorId != null) queryParams['sector_id'] = sectorId;
+
+      final uri = Uri.parse('$baseUrl/api/v1/advisories/marine-heatwave').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return MarineHeatwaveResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend marine heatwave fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return MarineHeatwaveResponseModel.fromJson(cachedData, isOfflineCached: true);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return MarineHeatwaveResponseModel.defaultFallback();
+  }
+
+  // 29. Western Ghats & Himalayan Orographic Cloudburst & Landslide Debris Flow Engine
+  Future<CloudburstResponseModel> getCloudburstAssessment({
+    double? latitude,
+    double? longitude,
+    String? catchmentId,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'cloudburst_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}_${catchmentId ?? 'default'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      if (catchmentId != null) queryParams['catchment_id'] = catchmentId;
+
+      final uri = Uri.parse('$baseUrl/api/v1/alerts/cloudburst').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return CloudburstResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend cloudburst fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return CloudburstResponseModel.fromJson(cachedData, isOfflineCached: true);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return CloudburstResponseModel.defaultFallback();
+  }
+
+  // 30. CPCB & IMD Industrial Hazmat Atmospheric Dispersion & Toxic Gas Plume Engine
+  Future<HazmatDispersionResponse> getHazmatDispersionAssessment({
+    double? latitude,
+    double? longitude,
+    String? clusterId,
+    String? gasSpecies,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'hazmat_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}_${clusterId ?? 'default'}_${gasSpecies ?? 'all'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      if (clusterId != null) queryParams['cluster_id'] = clusterId;
+      if (gasSpecies != null) queryParams['gas_species'] = gasSpecies;
+
+      final uri = Uri.parse('$baseUrl/api/v1/alerts/hazmat-dispersion').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return HazmatDispersionResponse.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend hazmat dispersion fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return HazmatDispersionResponse.fromJson(cachedData, isOfflineCached: true);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return HazmatDispersionResponse.defaultFallback();
+  }
+
+  // 31. FSI & ISRO-Bhuvan Forest Fire Danger & Fire Weather Index (FWI) Early Warning Engine
+  Future<ForestFireResponse> getForestFireAssessment({
+    double? latitude,
+    double? longitude,
+    String? zoneId,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'forest_fire_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}_${zoneId ?? 'default'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      if (zoneId != null) queryParams['zone_id'] = zoneId;
+
+      final uri = Uri.parse('$baseUrl/api/v1/alerts/forest-fire').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return ForestFireResponse.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend forest fire fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return ForestFireResponse.fromJson(cachedData, isOfflineCached: true);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return ForestFireResponse.defaultFallback();
+  }
+
+  // 32. NDMA & IMD National Heat Action Plan (HAP) & Solar UV Radiation Index Engine
+  Future<HeatActionPlanResponseModel> getHeatActionPlanAssessment({
+    double? latitude,
+    double? longitude,
+    String? zoneId,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'heat_action_plan_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}_${zoneId ?? 'default'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      if (zoneId != null) queryParams['zone_id'] = zoneId;
+
+      final uri = Uri.parse('$baseUrl/api/v1/alerts/heat-action-plan').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return HeatActionPlanResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend heat action plan fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return HeatActionPlanResponseModel.fromJson(cachedData, isOfflineCached: true);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return HeatActionPlanResponseModel.defaultFallback();
+  }
+
+  // 33. INCOIS & IMD Indian Tsunami Early Warning Centre (ITEWS) Engine
+  Future<TsunamiWarningResponseModel> getTsunamiAssessment({
+    double? latitude,
+    double? longitude,
+    String? sectorId,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'tsunami_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}_${sectorId ?? 'default'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      if (sectorId != null) queryParams['sector_id'] = sectorId;
+
+      final uri = Uri.parse('$baseUrl/api/v1/alerts/tsunami-warning').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return TsunamiWarningResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend tsunami fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return TsunamiWarningResponseModel.fromJson(cachedData, isOfflineCached: true);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return TsunamiWarningResponseModel.defaultFallback();
+  }
+
+  // 34. ICAR-CRIDA & IMD Crop Water Stress Index (CWSI) & Soil Moisture Engine
+  Future<CropWaterStressResponseModel> getCropWaterStressAssessment({
+    double? latitude,
+    double? longitude,
+    String? zoneId,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'crop_water_stress_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}_${zoneId ?? 'default'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      if (zoneId != null) queryParams['zone_id'] = zoneId;
+
+      final uri = Uri.parse('$baseUrl/api/v1/advisories/crop-water-stress').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return CropWaterStressResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend crop water stress fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return CropWaterStressResponseModel.fromJson(cachedData, isOfflineCached: true);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return CropWaterStressResponseModel.defaultFallback();
+  }
+
+  // 35. INCOIS-IMD Coastal Storm Surge & Tidal Inundation Nowcasting Engine
+  Future<StormSurgeResponseModel> getStormSurgeAssessment({
+    double? latitude,
+    double? longitude,
+    String? sectorId,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey =
+        'storm_surge_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}_${sectorId ?? 'default'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      if (sectorId != null) queryParams['sector_id'] = sectorId;
+
+      final uri = Uri.parse('$baseUrl/api/v1/alerts/storm-surge').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return StormSurgeResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend storm surge fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return StormSurgeResponseModel.fromJson(cachedData);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return StormSurgeResponseModel.defaultFallback();
+  }
+
+  // 36. INCOIS Ocean State Forecast (OSF), Swell Surge & Rip Current Warning
+  Future<OceanStateResponseModel> getOceanStateAssessment({
+    double? latitude,
+    double? longitude,
+    String? beachId,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey =
+        'ocean_state_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}_${beachId ?? 'default'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      if (beachId != null) queryParams['beach_id'] = beachId;
+
+      final uri = Uri.parse('$baseUrl/api/v1/alerts/ocean-state').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return OceanStateResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend ocean state fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return OceanStateResponseModel.fromJson(cachedData);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return OceanStateResponseModel.defaultFallback();
+  }
+
+  // 37. ICAR-NDRI & IMD Dairy Livestock Microclimate & Temperature-Humidity Index (THI)
+  Future<LivestockHeatStressResponseModel> getLivestockHeatStressAssessment({
+    double? latitude,
+    double? longitude,
+    String? basinId,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey =
+        'livestock_heat_stress_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}_${basinId ?? 'default'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      if (basinId != null) queryParams['basin_id'] = basinId;
+
+      final uri = Uri.parse('$baseUrl/api/v1/advisories/livestock-heat-stress').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return LivestockHeatStressResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend livestock heat stress fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return LivestockHeatStressResponseModel.fromJson(cachedData, isOffline: true);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return LivestockHeatStressResponseModel.defaultFallback();
+  }
+
+  // 38. NCS/IMD & NDMA National Earthquake Seismology, Fault-Line Proximity & Aftershock Probabilistic Engine
+  Future<EarthquakeResponseModel> getEarthquakeAssessment({
+    double? latitude,
+    double? longitude,
+    String? provinceId,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey =
+        'earthquake_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}_${provinceId ?? 'default'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      if (provinceId != null) queryParams['province_id'] = provinceId;
+
+      final uri = Uri.parse('$baseUrl/api/v1/alerts/earthquake').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return EarthquakeResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend earthquake assessment fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return EarthquakeResponseModel.fromJson(cachedData, isOffline: true);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return EarthquakeResponseModel.defaultFallback();
+  }
+
+  // 39. NISE, MNRE & IMD Solar Radiation, Photovoltaic (PV) Yield & Rooftop Solar Forecasting Engine
+  Future<SolarEnergyResponseModel> getSolarEnergyAssessment({
+    double? latitude,
+    double? longitude,
+    String? parkId,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey =
+        'solar_energy_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}_${parkId ?? 'default'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      if (parkId != null) queryParams['park_id'] = parkId;
+
+      final uri = Uri.parse('$baseUrl/api/v1/advisories/solar-energy').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return SolarEnergyResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend solar energy assessment fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return SolarEnergyResponseModel.fromJson(cachedData, isOffline: true);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return SolarEnergyResponseModel.defaultFallback();
+  }
+
+  // 40. IITM & IMD Lightning Flash Density, Cell Lifecycle & Downburst Nowcasting Engine
+  Future<LightningCellResponseModel> getLightningCellAssessment({
+    String? corridorId,
+    double? latitude,
+    double? longitude,
+    String language = 'en',
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey =
+        'lightning_cell_${corridorId ?? 'default'}_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}_$language';
+
+    try {
+      final queryParams = <String, String>{};
+      if (corridorId != null) queryParams['corridor_id'] = corridorId;
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      queryParams['language'] = language;
+
+      final uri = Uri.parse('$baseUrl/api/v1/alerts/lightning-density').replace(
+        queryParameters: queryParams,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return LightningCellResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend lightning cell fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return LightningCellResponseModel.fromJson(cachedData);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return LightningCellResponseModel.defaultFallback();
+  }
+
+  // 41. NIWE & IMD National Wind Resource Assessment, Hub-Height Shear & Wind Farm Generation
+  Future<WindEnergyResponseModel> getWindEnergyAssessment({
+    String? corridorId,
+    double? latitude,
+    double? longitude,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey =
+        'wind_energy_${corridorId ?? 'default'}_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (corridorId != null) queryParams['corridor_id'] = corridorId;
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+
+      final uri = Uri.parse('$baseUrl/api/v1/advisories/wind-energy').replace(
+        queryParameters: queryParams,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return WindEnergyResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend wind energy fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return WindEnergyResponseModel.fromJson(cachedData);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return WindEnergyResponseModel.defaultFallback();
+  }
+
+  // 42. NRSC-ISRO, CWC & NDMA Himalayan Glacial Lake Outburst Flood (GLOF) Early Warning
+  Future<GlofResponseModel> getGlofAssessment({
+    String? lakeId,
+    double? latitude,
+    double? longitude,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey =
+        'glof_${lakeId ?? 'default'}_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (lakeId != null) queryParams['lake_id'] = lakeId;
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+
+      final uri = Uri.parse('$baseUrl/api/v1/alerts/glof').replace(
+        queryParameters: queryParams,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return GlofResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend GLOF assessment fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return GlofResponseModel.fromJson(cachedData);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return GlofResponseModel.defaultFallback();
+  }
+
+  // 43. INCOIS & Indian Coast Guard (ICG) Marine Oil Spill Trajectory & Coastal Ecology Engine
+  Future<OilSpillResponseModel> getOilSpillAssessment({
+    String? corridorId,
+    double? latitude,
+    double? longitude,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey =
+        'oil_spill_${corridorId ?? 'default'}_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (corridorId != null) queryParams['corridor_id'] = corridorId;
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+
+      final uri = Uri.parse('$baseUrl/api/v1/alerts/oil-spill').replace(
+        queryParameters: queryParams,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return OilSpillResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend oil spill assessment fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return OilSpillResponseModel.fromJson(cachedData);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return OilSpillResponseModel.defaultFallback();
+  }
+
+  // 44. IMD & NDMA Urban Heat Island (UHI) & Cool Roof Albedo Engine
+  Future<UrbanHeatIslandResponseModel> getUrbanHeatIslandAssessment({
+    String? corridorId,
+    double? latitude,
+    double? longitude,
+    String? roofType,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey =
+        'uhi_${corridorId ?? 'default'}_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}_${roofType ?? 'default'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (corridorId != null) queryParams['corridor_id'] = corridorId;
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      if (roofType != null) queryParams['roof_type'] = roofType;
+
+      final uri = Uri.parse('$baseUrl/api/v1/advisories/urban-heat-island').replace(
+        queryParameters: queryParams,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return UrbanHeatIslandResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend urban heat island fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return UrbanHeatIslandResponseModel.fromJson(cachedData);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return UrbanHeatIslandResponseModel.defaultFallback();
+  }
+
+  // 45. INCOIS & CMFRI Potential Fishing Zone (PFZ), Chlorophyll-a & Fuel Conservation Engine
+  Future<PfzResponseModel> getPotentialFishingZoneAssessment({
+    String? sectorId,
+    double? latitude,
+    double? longitude,
+    String? craftType,
+    String language = 'en',
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey =
+        'pfz_${sectorId ?? 'default'}_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}_${craftType ?? 'default'}_$language';
+
+    try {
+      final queryParams = <String, String>{};
+      if (sectorId != null) queryParams['sector_id'] = sectorId;
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      if (craftType != null) queryParams['craft_type'] = craftType;
+      queryParams['language'] = language;
+
+      final uri = Uri.parse('$baseUrl/api/v1/advisories/potential-fishing-zone').replace(
+        queryParameters: queryParams,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return PfzResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend PFZ fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return PfzResponseModel.fromJson(cachedData);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return PfzResponseModel.defaultFallback();
+  }
+
+  // 46. IMD, NCMRWF & IITM Extended Range Prediction (ERP) & Intra-Seasonal Monsoon Pulse Engine
+  Future<ErpResponseModel> getExtendedRangePredictionAssessment({
+    String? zoneId,
+    double? latitude,
+    double? longitude,
+    String language = 'en',
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey =
+        'erp_${zoneId ?? 'default'}_${latitude?.toStringAsFixed(2)}_${longitude?.toStringAsFixed(2)}_$language';
+
+    try {
+      final queryParams = <String, String>{};
+      if (zoneId != null) queryParams['zone_id'] = zoneId;
+      if (latitude != null) queryParams['latitude'] = latitude.toString();
+      if (longitude != null) queryParams['longitude'] = longitude.toString();
+      queryParams['language'] = language;
+
+      final uri = Uri.parse('$baseUrl/api/v1/monsoon/extended-range').replace(
+        queryParameters: queryParams,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return ErpResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend ERP fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return ErpResponseModel.fromJson(cachedData);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return ErpResponseModel.defaultFallback();
+  }
+
+  // 47. IMD, CWC & DGRE Himalayan Snowmelt Runoff, Snow Cover Area (SCA) & Glacial Hydrology Engine
+  Future<SnowmeltRunoffResponseModel> getSnowmeltRunoffAssessment({
+    String? basinId,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'snowmelt_runoff_${basinId ?? 'default'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (basinId != null) queryParams['basin_id'] = basinId;
+
+      final uri = Uri.parse('$baseUrl/api/v1/hydro/snowmelt-runoff').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return SnowmeltRunoffResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend Snowmelt Runoff fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return SnowmeltRunoffResponseModel.fromJson(cachedData);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return SnowmeltRunoffResponseModel.defaultFallback();
+  }
+
+  // 48. IMD & ICAR Post-Harvest Mandi Weather Defense, Grain Moisture & Open-Godown Spoilage Engine
+  Future<AgriStorageResponseModel> getAgriStorageAssessment({
+    String? mandiId,
+    double? lat,
+    double? lon,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'agri_storage_${mandiId ?? '${lat}_$lon'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (mandiId != null) queryParams['mandi_id'] = mandiId;
+      if (lat != null) queryParams['lat'] = lat.toString();
+      if (lon != null) queryParams['lon'] = lon.toString();
+
+      final uri = Uri.parse('$baseUrl/api/v1/advisories/agri-storage').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return AgriStorageResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend Agri-Storage fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return AgriStorageResponseModel.fromJson(cachedData);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return AgriStorageResponseModel.defaultFallback();
+  }
+
+  // 49. IMD & CWC Flash Drought, Rapid Soil Desiccation & Atmospheric Evaporative Demand Engine
+  Future<FlashDroughtResponseModel> getFlashDroughtAssessment({
+    String? hotspotId,
+    double? lat,
+    double? lon,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'flash_drought_${hotspotId ?? '${lat}_$lon'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (hotspotId != null) queryParams['hotspot_id'] = hotspotId;
+      if (lat != null) queryParams['lat'] = lat.toString();
+      if (lon != null) queryParams['lon'] = lon.toString();
+
+      final uri = Uri.parse('$baseUrl/api/v1/advisories/flash-drought').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return FlashDroughtResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend Flash-Drought fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return FlashDroughtResponseModel.fromJson(cachedData);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return FlashDroughtResponseModel.defaultFallback();
+  }
+
+  // 50. IMD & CWC National Flood Forecasting, Hydrological Rating Curve & Embankment Breach Telemetry Engine
+  Future<HydroRatingResponseModel> getHydroRatingAssessment({
+    String? basinId,
+    double? lat,
+    double? lon,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'hydro_rating_${basinId ?? '${lat}_$lon'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (basinId != null) queryParams['basin_id'] = basinId;
+      if (lat != null) queryParams['lat'] = lat.toString();
+      if (lon != null) queryParams['lon'] = lon.toString();
+
+      final uri = Uri.parse('$baseUrl/api/v1/hydro/rating-curve').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return HydroRatingResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend Hydro-Rating fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return HydroRatingResponseModel.fromJson(cachedData, isOfflineCached: true);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return HydroRatingResponseModel.defaultFallback();
+  }
+
+  // 51. IMD, INCOIS & CGWB Coastal Estuarine Saltwater Intrusion & Aquifer Salinization Engine
+  Future<SaltwaterIntrusionResponseModel> getSaltwaterIntrusionAssessment({
+    String? zoneId,
+    double? lat,
+    double? lon,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'saltwater_intrusion_${zoneId ?? '${lat}_$lon'}';
+
+    try {
+      final queryParams = <String, String>{};
+      if (zoneId != null) queryParams['zone_id'] = zoneId;
+      if (lat != null) queryParams['lat'] = lat.toString();
+      if (lon != null) queryParams['lon'] = lon.toString();
+
+      final uri = Uri.parse('$baseUrl/api/v1/coastal/saltwater-intrusion').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = json.decode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        await prefs.setString(cacheKey, json.encode(data));
+        return SaltwaterIntrusionResponseModel.fromJson(data);
+      }
+    } catch (e) {
+      debugPrint('Backend Saltwater Intrusion fetch failed ($e). Checking offline cache.');
+    }
+
+    // Try reading cached data from SharedPreferences
+    final cachedJsonStr = prefs.getString(cacheKey);
+    if (cachedJsonStr != null) {
+      try {
+        final cachedData = json.decode(cachedJsonStr) as Map<String, dynamic>;
+        return SaltwaterIntrusionResponseModel.fromJson(cachedData, isOfflineCached: true);
+      } catch (_) {}
+    }
+
+    // Fallback to calibrated offline baseline
+    return SaltwaterIntrusionResponseModel.defaultFallback();
+  }
 }
+
 
 
 

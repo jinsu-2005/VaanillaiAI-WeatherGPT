@@ -965,29 +965,54 @@ class _MarineOceanScreenState extends State<MarineOceanScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Coastal Warnings (Multilingual)',
-                style: TextStyle(
-                  color: textPrimary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Row(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final chips = [
+                _buildLangChip('EN', 'en', isDark),
+                const SizedBox(width: 4),
+                _buildLangChip('தமிழ்', 'ta', isDark),
+                const SizedBox(width: 4),
+                _buildLangChip('മലയാളം', 'ml', isDark),
+                const SizedBox(width: 4),
+                _buildLangChip('हिंदी', 'hi', isDark),
+              ];
+
+              if (constraints.maxWidth < 420) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Coastal Warnings (Multilingual)',
+                      style: TextStyle(
+                        color: textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(children: chips),
+                    ),
+                  ],
+                );
+              }
+
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildLangChip('EN', 'en', isDark),
-                  const SizedBox(width: 4),
-                  _buildLangChip('தமிழ்', 'ta', isDark),
-                  const SizedBox(width: 4),
-                  _buildLangChip('മലയാളം', 'ml', isDark),
-                  const SizedBox(width: 4),
-                  _buildLangChip('हिंदी', 'hi', isDark),
+                  Text(
+                    'Coastal Warnings (Multilingual)',
+                    style: TextStyle(
+                      color: textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Row(children: chips),
                 ],
-              ),
-            ],
+              );
+            },
           ),
           const SizedBox(height: 12),
           Container(

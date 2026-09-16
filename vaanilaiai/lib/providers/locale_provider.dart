@@ -60,6 +60,12 @@ class LocaleProvider extends ChangeNotifier {
       'favorable': 'Favorable',
       'risky': 'Risky',
       'unfavorable': 'Unfavorable',
+      'online': 'Online',
+      'offline': 'Offline',
+      'offline_notice': 'You are offline. Showing cached weather data.',
+      'back_online': 'Back online',
+      'check_connection': 'Check Connection',
+      'connection_status': 'Connection Status',
     },
     'ta': {
       'app_name': 'வானிலை AI',
@@ -90,6 +96,12 @@ class LocaleProvider extends ChangeNotifier {
       'favorable': 'ஏற்றது',
       'risky': 'கவனமுடன்',
       'unfavorable': 'தவிர்க்கவும்',
+      'online': 'ஆன்லைன்',
+      'offline': 'ஆஃப்லைன்',
+      'offline_notice': 'நீங்கள் ஆஃப்லைனில் உள்ளீர்கள். சேமிக்கப்பட்ட வானிலை தரவு காட்டப்படுகிறது.',
+      'back_online': 'இணைப்பு மீண்டும் கிடைத்தது',
+      'check_connection': 'இணைப்பைச் சரிபார்க்கவும்',
+      'connection_status': 'இணைப்பு நிலை',
     },
     'hi': {
       'app_name': 'वानिलाई AI',
@@ -120,6 +132,12 @@ class LocaleProvider extends ChangeNotifier {
       'favorable': 'अनुकूल',
       'risky': 'जोखिमपूर्ण',
       'unfavorable': 'प्रतिकूल',
+      'online': 'ऑनलाइन',
+      'offline': 'ऑफलाइन',
+      'offline_notice': 'आप ऑफलाइन हैं। सुरक्षित मौसम डेटा दिखाया जा रहा है।',
+      'back_online': 'पुनः ऑनलाइन',
+      'check_connection': 'कनेक्शन जांचें',
+      'connection_status': 'कनेक्शन स्थिति',
     },
   };
 }

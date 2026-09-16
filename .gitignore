@@ -1,22 +1,108 @@
-# Python / Virtual Environment
-.venv/
-venv/
-ENV/
+# ==============================================================================
+# Git Ignore Configuration for VaanilaiAI (WeatherGPT)
+# ==============================================================================
+
+# ---------------------------------------------------------
+# Environment & Secrets (Never commit credentials)
+# ---------------------------------------------------------
+.env
+*.env
+!.env.example
+*.pem
+*.key
+*.cert
+*.crt
+
+# ---------------------------------------------------------
+# Python & Backend
+# ---------------------------------------------------------
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
 *.sqlite3
 *.db
-.env
-*.env
+*.db-journal
 
-# Flutter / Dart
+# ---------------------------------------------------------
+# Flutter & Dart
+# ---------------------------------------------------------
 .dart_tool/
 .flutter-plugins
 .flutter-plugins-dependencies
-build/
+.pub-cache/
 .pub/
-.pub-spec.lock
+build/
+coverage/
+
+# iOS / macOS build artifacts
 ios/Flutter/ephemeral/
+ios/Flutter/.last_build_id
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/Flutter/app.flx
+ios/Flutter/flutter_assets/
+ios/Pods/
+ios/.symlinks/
+*.xcworkspace
+*.xcuserdata
+
+# Android build artifacts
+android/.gradle/
+android/app/debug/
+android/app/profile/
+android/app/release/
+.gradle/
+*.apk
+*.aab
+
+# Symbolication & Obfuscation
+app.*.symbols
+app.*.map.json
+
+# ---------------------------------------------------------
+# IDEs & Editors
+# ---------------------------------------------------------
 .idea/
 .vscode/
+*.iml
+*.ipr
+*.iws
+*.swp
+*.swo
+*~
+
+# ---------------------------------------------------------
+# Operating System & Temporary Files
+# ---------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+desktop.ini
+ehthumbs.db
+*.log
+*.tmp
+*.bak
+
+# ---------------------------------------------------------
+# Local Testing Screen Captures & Probe Dumps
+# ---------------------------------------------------------
+moto_*.png
+*_test.png
+test_*.png
+tile_*.png
+esri_dark_*.png
+esri_test.png
+radar_tile.png
+imagery_*.png
+current_device_screen.png
+caz_koc.gif

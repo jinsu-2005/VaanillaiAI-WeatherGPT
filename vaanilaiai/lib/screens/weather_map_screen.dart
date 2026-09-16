@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import '../providers/weather_provider.dart';
@@ -13,6 +15,36 @@ import '../services/api_service.dart';
 import '../widgets/citizen_report_dialog.dart';
 import '../theme/app_colors.dart';
 
+/// Representation of a single Doppler radar frame from RainViewer.
+class _RadarFrame {
+  final int time;
+  final String path;
+  final bool isForecast;
+
+  const _RadarFrame({
+    required this.time,
+    required this.path,
+    this.isForecast = false,
+  });
+
+  DateTime get dateTime =>
+      DateTime.fromMillisecondsSinceEpoch(time * 1000, isUtc: true).toLocal();
+
+  String formattedTime(DateTime currentNow) {
+    final dt = dateTime;
+    final timeStr = DateFormat('h:mm a').format(dt);
+    final diffMin = dt.difference(currentNow).inMinutes;
+
+    if (diffMin.abs() <= 5) {
+      return 'Live ($timeStr)';
+    } else if (diffMin < 0) {
+      return '$timeStr (${diffMin}m)';
+    } else {
+      return '$timeStr (+${diffMin}m)';
+    }
+  }
+}
+
 class WeatherMapScreen extends StatefulWidget {
   const WeatherMapScreen({super.key});
 
@@ -22,20 +54,30 @@ class WeatherMapScreen extends StatefulWidget {
 
 class _WeatherMapScreenState extends State<WeatherMapScreen> {
   final MapController _mapController = MapController();
+
+  // Active Layer ID: 'precipitation', 'imd_dwr', 'insat_ctt', 'insat_wv', 'insat_vis', 'citizen', 'alerts'
   String _activeLayer = 'precipitation';
+
+  // Radar Replay & Frame State
+  List<_RadarFrame> _radarFrames = [];
+  int _currentFrameIndex = 0;
+  String _radarHost = 'https://tilecache.rainviewer.com';
   bool _isPlaying = false;
-  double _timelineValue = 0.0;
-  String? _radarUrlTemplate;
+  Timer? _playbackTimer;
+  bool _isLoadingRadarFrames = false;
 
   // Satellite & Doppler Radar State
   SatelliteRadarOverviewModel? _satelliteRadarData;
   bool _isLoadingRadar = false;
   bool _showRadarRangeRings = true;
 
+  // Selected DWR product tab in modal: 'caz' (MaxZ), 'sri' (Surface Rain), 'ppz' (Reflectivity)
+  String _selectedDwrProduct = 'caz';
+
   @override
   void initState() {
     super.initState();
-    _fetchLatestRadarPath();
+    _fetchRainViewerFrames();
     _loadSatelliteRadarData();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final wp = Provider.of<WeatherProvider>(context, listen: false);
@@ -46,25 +88,109 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
     });
   }
 
-  Future<void> _fetchLatestRadarPath() async {
+  @override
+  void dispose() {
+    _playbackTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _fetchRainViewerFrames() async {
+    if (!mounted) return;
+    setState(() => _isLoadingRadarFrames = true);
+
     try {
       final response = await http
           .get(Uri.parse('https://api.rainviewer.com/public/weather-maps.json'))
-          .timeout(const Duration(seconds: 6));
+          .timeout(const Duration(seconds: 7));
+
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final host = data['host'] ?? 'https://tilecache.rainviewer.com';
-        final past = data['radar']?['past'] as List?;
-        if (past != null && past.isNotEmpty) {
-          final latestPath = past.last['path'];
-          if (mounted) {
-            setState(() {
-              _radarUrlTemplate = '$host$latestPath/256/{z}/{x}/{y}/2/1_1.png';
-            });
+        final data = json.decode(response.body) as Map<String, dynamic>;
+        final host = data['host'] as String? ?? 'https://tilecache.rainviewer.com';
+        final radar = data['radar'] as Map<String, dynamic>?;
+
+        final List<_RadarFrame> frames = [];
+
+        if (radar != null) {
+          final past = radar['past'] as List?;
+          if (past != null) {
+            for (final f in past) {
+              if (f is Map<String, dynamic> && f['time'] != null && f['path'] != null) {
+                frames.add(_RadarFrame(
+                  time: (f['time'] as num).toInt(),
+                  path: f['path'] as String,
+                  isForecast: false,
+                ));
+              }
+            }
+          }
+
+          final nowcast = radar['nowcast'] as List?;
+          if (nowcast != null) {
+            for (final f in nowcast) {
+              if (f is Map<String, dynamic> && f['time'] != null && f['path'] != null) {
+                frames.add(_RadarFrame(
+                  time: (f['time'] as num).toInt(),
+                  path: f['path'] as String,
+                  isForecast: true,
+                ));
+              }
+            }
           }
         }
+
+        if (mounted) {
+          setState(() {
+            _radarHost = host;
+            _radarFrames = frames;
+            if (frames.isNotEmpty) {
+              _currentFrameIndex = frames.length - 1;
+            }
+            _isLoadingRadarFrames = false;
+          });
+        }
       }
-    } catch (_) {}
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoadingRadarFrames = false);
+      }
+    }
+  }
+
+  void _togglePlayback() {
+    if (_radarFrames.isEmpty) return;
+
+    if (_isPlaying) {
+      _playbackTimer?.cancel();
+      setState(() => _isPlaying = false);
+    } else {
+      setState(() => _isPlaying = true);
+      _playbackTimer?.cancel();
+      _playbackTimer = Timer.periodic(const Duration(milliseconds: 700), (_) {
+        if (!mounted) return;
+        setState(() {
+          _currentFrameIndex = (_currentFrameIndex + 1) % _radarFrames.length;
+        });
+      });
+    }
+  }
+
+  void _onSliderChanged(double value) {
+    if (_radarFrames.isEmpty) return;
+    if (_isPlaying) {
+      _playbackTimer?.cancel();
+      _isPlaying = false;
+    }
+    setState(() {
+      _currentFrameIndex = value.round().clamp(0, _radarFrames.length - 1);
+    });
+  }
+
+  String get _currentRadarTileUrl {
+    if (_radarFrames.isEmpty || _currentFrameIndex >= _radarFrames.length) {
+      return '';
+    }
+    final frame = _radarFrames[_currentFrameIndex];
+    return '$_radarHost${frame.path}/256/{z}/{x}/{y}/2/1_1.png';
   }
 
   Future<void> _loadSatelliteRadarData() async {
@@ -108,142 +234,288 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
 
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: isDark ? const Color(0xFF161E31) : Colors.white,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.brandBlue.withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.radar_rounded, color: AppColors.brandBlue, size: 24),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          station.name,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final stnCode = station.stationCode ?? 'delhi';
+            final liveImgUrl = 'https://mausam.imd.gov.in/Radar/${_selectedDwrProduct}_$stnCode.gif';
+
+            return SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.withValues(alpha: 0.4),
+                          borderRadius: BorderRadius.circular(2),
                         ),
-                        Text(
-                          '${station.state} • ${station.band}',
-                          style: const TextStyle(fontSize: 11.5, color: Colors.grey),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.cyan.withValues(alpha: 0.15),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.radar_rounded, color: Colors.cyanAccent, size: 24),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                station.name,
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                              ),
+                              Text(
+                                '${station.state} • ${station.band}',
+                                style: const TextStyle(fontSize: 11.5, color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.alertGreen.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.alertGreen, width: 1),
+                          ),
+                          child: Text(
+                            station.status.toUpperCase(),
+                            style: const TextStyle(
+                              color: AppColors.alertGreen,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.alertGreen.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.alertGreen, width: 1),
+                    const SizedBox(height: 16),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.black26 : Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.all(3),
+                      child: Row(
+                        children: [
+                          _buildDwrProductTab(
+                            id: 'caz',
+                            label: 'MaxZ Reflectivity',
+                            isSelected: _selectedDwrProduct == 'caz',
+                            onTap: () => setModalState(() => _selectedDwrProduct = 'caz'),
+                          ),
+                          _buildDwrProductTab(
+                            id: 'ppz',
+                            label: 'PPI Echoes',
+                            isSelected: _selectedDwrProduct == 'ppz',
+                            onTap: () => setModalState(() => _selectedDwrProduct = 'ppz'),
+                          ),
+                          _buildDwrProductTab(
+                            id: 'sri',
+                            label: 'Surface Rain',
+                            isSelected: _selectedDwrProduct == 'sri',
+                            onTap: () => setModalState(() => _selectedDwrProduct = 'sri'),
+                          ),
+                        ],
+                      ),
                     ),
-                    child: Text(
-                      station.status.toUpperCase(),
-                      style: const TextStyle(color: AppColors.alertGreen, fontSize: 10, fontWeight: FontWeight.w800),
+                    const SizedBox(height: 14),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        height: 220,
+                        width: double.infinity,
+                        color: Colors.black,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Image.network(
+                              liveImgUrl,
+                              fit: BoxFit.contain,
+                              loadingBuilder: (context, child, progress) {
+                                if (progress == null) return child;
+                                return const Center(
+                                  child: CircularProgressIndicator(color: Colors.cyanAccent, strokeWidth: 2),
+                                );
+                              },
+                              errorBuilder: (context, error, stackTrace) {
+                                return Center(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.signal_wifi_connected_no_internet_4_rounded,
+                                          color: Colors.grey, size: 32),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'IMD ${station.name} Sweep Standby',
+                                        style: const TextStyle(color: Colors.white70, fontSize: 11),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.75),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.fiber_manual_record, color: Colors.redAccent, size: 10),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'IMD MAUSAM LIVE',
+                                      style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildStationMetricTile(
+                            label: 'Peak Reflectivity',
+                            value: station.peakReflectivityDbz != null
+                                ? '${station.peakReflectivityDbz!.toStringAsFixed(1)} dBZ'
+                                : '--',
+                            subtitle: (station.peakReflectivityDbz ?? 0) > 35
+                                ? 'Heavy Convection'
+                                : 'Moderate Echo',
+                            icon: Icons.grain_rounded,
+                            color: (station.peakReflectivityDbz ?? 0) > 35 ? AppColors.alertRed : Colors.cyanAccent,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _buildStationMetricTile(
+                            label: 'Convective Cells',
+                            value: '${station.convectiveCellsDetected} Active',
+                            subtitle: station.stormMotionSpeedKmh != null
+                                ? '${station.stormMotionSpeedKmh!.round()} km/h @ ${station.stormMotionHeadingDeg?.round() ?? 0}°'
+                                : 'Stationary',
+                            icon: Icons.thunderstorm_rounded,
+                            color: station.convectiveCellsDetected > 0 ? AppColors.alertOrange : AppColors.alertGreen,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildStationMetricTile(
+                            label: 'Surveillance Range',
+                            value: '${station.maxRangeKm} km',
+                            subtitle: 'Frequency: ${station.frequencyGhz} GHz',
+                            icon: Icons.track_changes_rounded,
+                            color: AppColors.brandBlueLight,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _buildStationMetricTile(
+                            label: 'Distance to You',
+                            value: '$distToUser km',
+                            subtitle: distToUser <= 100
+                                ? 'Inside 100km Nowcast'
+                                : (distToUser <= 250 ? 'Inside 250km Range' : 'Extended Range'),
+                            icon: Icons.near_me_rounded,
+                            color: distToUser <= 100 ? AppColors.alertGreen : Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Last Sweep: ${station.lastSweepUtc.toLocal().toString().substring(11, 16)} IST',
+                          style: const TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
+                        ),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            _mapController.move(LatLng(station.latitude, station.longitude), 9.0);
+                            Navigator.pop(ctx);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.brandBlue,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          ),
+                          icon: const Icon(Icons.center_focus_strong_rounded, size: 15),
+                          label: const Text('Center Radar',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 16),
-              // Radar metrics grid
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildStationMetricTile(
-                      label: 'Peak Reflectivity',
-                      value: station.peakReflectivityDbz != null
-                          ? '${station.peakReflectivityDbz!.toStringAsFixed(1)} dBZ'
-                          : '--',
-                      subtitle: (station.peakReflectivityDbz ?? 0) > 35
-                          ? 'Heavy Convection'
-                          : 'Moderate / Light Echo',
-                      icon: Icons.grain_rounded,
-                      color: (station.peakReflectivityDbz ?? 0) > 35 ? AppColors.alertRed : AppColors.brandBlue,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _buildStationMetricTile(
-                      label: 'Convective Cells',
-                      value: '${station.convectiveCellsDetected} Active',
-                      subtitle: station.stormMotionSpeedKmh != null
-                          ? '${station.stormMotionSpeedKmh!.round()} km/h @ ${station.stormMotionHeadingDeg?.round() ?? 0}°'
-                          : 'Stationary',
-                      icon: Icons.thunderstorm_rounded,
-                      color: station.convectiveCellsDetected > 0 ? AppColors.alertOrange : AppColors.alertGreen,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildStationMetricTile(
-                      label: 'Surveillance Range',
-                      value: '${station.maxRangeKm} km',
-                      subtitle: 'Frequency: ${station.frequencyGhz} GHz',
-                      icon: Icons.track_changes_rounded,
-                      color: AppColors.brandBlueLight,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _buildStationMetricTile(
-                      label: 'Distance from You',
-                      value: '$distToUser km',
-                      subtitle: distToUser <= 100
-                          ? 'Inside 100km Nowcast'
-                          : (distToUser <= 250 ? 'Inside 250km Range' : 'Extended Range'),
-                      icon: Icons.near_me_rounded,
-                      color: distToUser <= 100 ? AppColors.alertGreen : Colors.grey,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Last Volume Sweep: ${station.lastSweepUtc.toLocal().toString().substring(11, 16)} IST',
-                    style: const TextStyle(fontSize: 11, color: Colors.grey, fontStyle: FontStyle.italic),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      _mapController.move(LatLng(station.latitude, station.longitude), 9.0);
-                      Navigator.pop(ctx);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.brandBlue,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    ),
-                    icon: const Icon(Icons.center_focus_strong_rounded, size: 15),
-                    label: const Text('Center Radar', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                  ),
-                ],
-              ),
-            ],
-          ),
+            );
+          },
         );
       },
+    );
+  }
+
+  Widget _buildDwrProductTab({
+    required String id,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.brandBlue : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+              color: isSelected ? Colors.white : Colors.grey,
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -409,6 +681,70 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
     );
   }
 
+  void _showHighResSatelliteViewer(BuildContext context, String imageUrl, String title) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: Colors.black,
+          insetPadding: const EdgeInsets.all(12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AppBar(
+                backgroundColor: Colors.black,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                title: Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              Expanded(
+                child: InteractiveViewer(
+                  minScale: 0.5,
+                  maxScale: 4.0,
+                  child: Image.network(
+                    imageUrl,
+                    fit: BoxFit.contain,
+                    loadingBuilder: (context, child, progress) {
+                      if (progress == null) return child;
+                      return const Center(
+                        child: CircularProgressIndicator(color: Colors.cyanAccent, strokeWidth: 2),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Pinch to zoom native resolution',
+                        style: TextStyle(color: Colors.white60, fontSize: 11)),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text('ISRO MOSDAC / IMD',
+                          style: TextStyle(color: Colors.cyanAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -422,7 +758,12 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
         ? AppColors.darkSurface.withValues(alpha: 0.94)
         : Colors.grey.shade900.withValues(alpha: 0.88);
     final mapCardBorder = isDark ? AppColors.darkOutline : Colors.white.withValues(alpha: 0.12);
-    final mapTextSecondary = Colors.white70;
+
+    final String insatImageUrl = _activeLayer == 'insat_vis'
+        ? 'https://mausam.imd.gov.in/Satellite/3Dasiasec_vis.jpg'
+        : (_activeLayer == 'insat_wv'
+            ? 'https://mausam.imd.gov.in/Satellite/3Dasiasec_wv.jpg'
+            : 'https://mausam.imd.gov.in/Satellite/3Dasiasec_ir1.jpg');
 
     return Scaffold(
       appBar: AppBar(
@@ -431,7 +772,6 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
         actions: [
-          // Range Rings Toggle
           if (_activeLayer == 'imd_dwr')
             IconButton(
               icon: Icon(
@@ -439,27 +779,26 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
                 color: _showRadarRangeRings ? Colors.cyanAccent : Colors.grey,
               ),
               onPressed: () => setState(() => _showRadarRangeRings = !_showRadarRangeRings),
-              tooltip: _showRadarRangeRings ? 'Hide 250km Surveillance Rings' : 'Show 250km Surveillance Rings',
+              tooltip: _showRadarRangeRings ? 'Hide Surveillance Rings' : 'Show Surveillance Rings',
             ),
-          // Refresh Satellite/Radar Data
           IconButton(
-            icon: _isLoadingRadar
+            icon: _isLoadingRadar || _isLoadingRadarFrames
                 ? const SizedBox(
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.cyanAccent),
                   )
                 : Icon(Icons.refresh_rounded, color: accentBlue),
-            onPressed: _isLoadingRadar
+            onPressed: (_isLoadingRadar || _isLoadingRadarFrames)
                 ? null
                 : () {
-                    _fetchLatestRadarPath();
+                    _fetchRainViewerFrames();
                     _loadSatelliteRadarData();
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Refreshing ISRO MOSDAC & IMD Doppler Radar feeds...')),
+                      const SnackBar(content: Text('Refreshing radar and satellite telemetry...')),
                     );
                   },
-            tooltip: 'Refresh Satellite & Radar Feeds',
+            tooltip: 'Refresh Weather Layers',
           ),
           IconButton(
             icon: Icon(Icons.my_location_rounded, color: accentBlue),
@@ -476,38 +815,74 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
               ),
               backgroundColor: AppColors.brandBlue,
               icon: const Icon(Icons.add_location_alt_rounded, color: Colors.white),
-              label: const Text('Report Hazard', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              label: const Text('Report Hazard',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             )
           : null,
       body: Stack(
         children: [
-          // 1. FlutterMap
+          // 1. FlutterMap: Interactive, Smooth GIS Map
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
               initialCenter: currentPoint,
               initialZoom: 7.5,
-              minZoom: 3.0,
+              minZoom: 2.0,
               maxZoom: 18.0,
+              interactionOptions: const InteractionOptions(
+                flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+              ),
             ),
             children: [
-              // Base Map Tiles
+              // Base Map Tiles: Esri World Dark Gray Canvas (High contrast dark GIS basemap, 100% free, zero API key required)
               TileLayer(
-                urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-                subdomains: const ['a', 'b', 'c', 'd'],
-                userAgentPackageName: 'com.vaanilai.ai',
+                urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+                userAgentPackageName: 'com.vaanilaiai.app',
+                minZoom: 1,
+                maxZoom: 18,
+                maxNativeZoom: 16,
               ),
 
-              // RainViewer Radar Overlay (when precipitation layer is active)
-              if (_activeLayer == 'precipitation' && _radarUrlTemplate != null)
-                TileLayer(
-                  urlTemplate: _radarUrlTemplate!,
-                  userAgentPackageName: 'com.vaanilai.ai',
-                  tileBuilder: (context, tileWidget, tile) =>
-                      Opacity(opacity: 0.65, child: tileWidget),
+              // Weather Overlay: INSAT-3DR Geostationary Products
+              if (_activeLayer.startsWith('insat_'))
+                OverlayImageLayer(
+                  overlayImages: [
+                    OverlayImage(
+                      bounds: LatLngBounds(
+                        const LatLng(-10.0, 40.0),
+                        const LatLng(45.0, 115.0),
+                      ),
+                      imageProvider: NetworkImage(insatImageUrl),
+                      opacity: 0.72,
+                    ),
+                  ],
                 ),
 
-              // Doppler Weather Radar Range Rings Layer (when imd_dwr is active)
+              // Weather Overlay: RainViewer Live Radar Tiles
+              // Clamped to maxNativeZoom: 7 to completely eliminate the "Zoom Level Not Supported" watermark!
+              if ((_activeLayer == 'precipitation' || _activeLayer == 'imd_dwr') &&
+                  _currentRadarTileUrl.isNotEmpty)
+                TileLayer(
+                  key: ValueKey(_currentRadarTileUrl),
+                  urlTemplate: _currentRadarTileUrl,
+                  userAgentPackageName: 'com.vaanilaiai.app',
+                  minZoom: 0,
+                  maxZoom: 18,
+                  maxNativeZoom: 7,
+                  tileBuilder: (context, tileWidget, tile) =>
+                      Opacity(opacity: 0.72, child: tileWidget),
+                ),
+
+              // Reference Labels & Boundaries (Displays cities & borders crisply on top of radar overlays)
+              TileLayer(
+                urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+                userAgentPackageName: 'com.vaanilaiai.app',
+                minZoom: 1,
+                maxZoom: 18,
+                maxNativeZoom: 16,
+              ),
+
+              // Doppler Weather Radar Range Rings Layer (when imd_dwr active)
               if (_activeLayer == 'imd_dwr' && _satelliteRadarData != null)
                 CircleLayer(
                   circles: [
@@ -538,72 +913,52 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
               // Marker Layer
               MarkerLayer(
                 markers: [
-                  // Current location marker
+                  // User Location marker
                   Marker(
                     point: currentPoint,
-                    width: 180,
-                    height: 70,
+                    width: 170,
+                    height: 60,
                     child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
                             color: AppColors.darkSurface.withValues(alpha: 0.92),
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(8),
                             border: Border.all(color: accentBlue, width: 1.5),
                             boxShadow: [
                               BoxShadow(
                                 color: accentBlue.withValues(alpha: 0.4),
-                                blurRadius: 10,
+                                blurRadius: 8,
                               ),
                             ],
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.location_on_rounded, color: accentBlue, size: 14),
+                              Icon(Icons.my_location_rounded, color: accentBlue, size: 13),
                               const SizedBox(width: 4),
                               Flexible(
                                 child: Text(
                                   '${weatherProvider.locationName} (${weatherProvider.forecast?.current.temperature.round() ?? "--"}°)',
                                   style: const TextStyle(
                                     color: Colors.white,
-                                    fontSize: 11,
+                                    fontSize: 10.5,
                                     fontWeight: FontWeight.w700,
                                   ),
                                   overflow: TextOverflow.ellipsis,
-                                  maxLines: 1,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        Icon(Icons.arrow_drop_down_rounded, color: accentBlue, size: 22),
+                        Icon(Icons.arrow_drop_down_rounded, color: accentBlue, size: 18),
                       ],
                     ),
                   ),
 
-                  // Alert markers (when alerts layer is active)
-                  if (_activeLayer == 'alerts')
-                    ...alertProvider.activeAlerts.map((alert) {
-                      final isRed = alert.severity.toLowerCase() == 'red';
-                      final color = isRed ? AppColors.alertRed : AppColors.alertOrange;
-                      return Marker(
-                        point: currentPoint,
-                        width: 40,
-                        height: 40,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: color.withValues(alpha: 0.3),
-                            shape: BoxShape.circle,
-                            border: Border.all(color: color, width: 2),
-                          ),
-                          child: Icon(Icons.warning_rounded, color: color, size: 20),
-                        ),
-                      );
-                    }),
-
-                  // IMD Doppler Weather Radar Station Markers (when imd_dwr is active)
+                  // IMD Doppler Weather Radar Station Markers
                   if (_activeLayer == 'imd_dwr' && _satelliteRadarData != null)
                     ..._satelliteRadarData!.dwrStations.map((station) {
                       final hasConvectiveEcho = (station.peakReflectivityDbz ?? 0) > 30.0;
@@ -611,37 +966,41 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
 
                       return Marker(
                         point: LatLng(station.latitude, station.longitude),
-                        width: 54,
-                        height: 54,
+                        width: 50,
+                        height: 50,
                         child: GestureDetector(
                           onTap: () => _showDwrStationDetails(context, station),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Container(
-                                padding: const EdgeInsets.all(6),
+                                padding: const EdgeInsets.all(5),
                                 decoration: BoxDecoration(
                                   color: AppColors.darkSurface.withValues(alpha: 0.95),
                                   shape: BoxShape.circle,
-                                  border: Border.all(color: pinColor, width: 2),
+                                  border: Border.all(color: pinColor, width: 1.8),
                                   boxShadow: [
                                     BoxShadow(
                                       color: pinColor.withValues(alpha: 0.4),
-                                      blurRadius: 8,
+                                      blurRadius: 6,
                                     ),
                                   ],
                                 ),
-                                child: Icon(Icons.radar_rounded, color: pinColor, size: 20),
+                                child: Icon(Icons.radar_rounded, color: pinColor, size: 18),
                               ),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                                 decoration: BoxDecoration(
-                                  color: Colors.black.withValues(alpha: 0.75),
+                                  color: Colors.black.withValues(alpha: 0.8),
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
                                   station.name.split('(').first.trim().split(' ').first,
-                                  style: const TextStyle(color: Colors.white, fontSize: 8.5, fontWeight: FontWeight.bold),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
@@ -651,7 +1010,7 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
                       );
                     }),
 
-                  // Citizen Ground Report Markers (when citizen layer is active)
+                  // Citizen Ground Report Markers
                   if (_activeLayer == 'citizen')
                     ...citizenProvider.reports.map((report) {
                       Color pinColor = Colors.blue;
@@ -666,8 +1025,8 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
 
                       return Marker(
                         point: LatLng(report.latitude, report.longitude),
-                        width: 44,
-                        height: 44,
+                        width: 40,
+                        height: 40,
                         child: GestureDetector(
                           onTap: () => _showCitizenReportDetails(context, report),
                           child: Container(
@@ -678,12 +1037,32 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
                               boxShadow: [
                                 BoxShadow(
                                   color: pinColor.withValues(alpha: 0.5),
-                                  blurRadius: 8,
+                                  blurRadius: 6,
                                 ),
                               ],
                             ),
-                            child: Icon(pinIcon, color: Colors.white, size: 22),
+                            child: Icon(pinIcon, color: Colors.white, size: 20),
                           ),
+                        ),
+                      );
+                    }),
+
+                  // Disaster Zone Alert Markers
+                  if (_activeLayer == 'alerts')
+                    ...alertProvider.activeAlerts.map((alert) {
+                      final isRed = alert.severity.toLowerCase() == 'red';
+                      final color = isRed ? AppColors.alertRed : AppColors.alertOrange;
+                      return Marker(
+                        point: currentPoint,
+                        width: 38,
+                        height: 38,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.3),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: color, width: 2),
+                          ),
+                          child: Icon(Icons.warning_rounded, color: color, size: 18),
                         ),
                       );
                     }),
@@ -692,11 +1071,11 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
             ],
           ),
 
-          // 2. Layer Switcher Pills
+          // 2. Layer Switcher Pills (Top Header)
           Positioned(
-            top: 16,
-            left: 16,
-            right: 16,
+            top: 12,
+            left: 12,
+            right: 12,
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -754,12 +1133,12 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
             ),
           ),
 
-          // 3. Nearest Radar HUD Badge (Active for IMD DWR layer or general status)
-          if (_satelliteRadarData?.nearestDwrStation != null)
+          // 3. Nearest DWR HUD Badge (Context-sensitive: Visible ONLY on IMD DWR Layer)
+          if (_activeLayer == 'imd_dwr' && _satelliteRadarData?.nearestDwrStation != null)
             Positioned(
-              top: 68,
-              left: 16,
-              right: 16,
+              top: 60,
+              left: 12,
+              right: 12,
               child: GestureDetector(
                 onTap: () {
                   final station = _satelliteRadarData!.nearestDwrStation!;
@@ -767,29 +1146,29 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
                   _showDwrStationDetails(context, station);
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                   decoration: BoxDecoration(
                     color: mapCardBg,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: mapCardBorder, width: 1),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 8,
+                        blurRadius: 6,
                       ),
                     ],
                   ),
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(6),
+                        padding: const EdgeInsets.all(5),
                         decoration: BoxDecoration(
                           color: Colors.cyan.withValues(alpha: 0.15),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.radar_rounded, color: Colors.cyanAccent, size: 16),
+                        child: const Icon(Icons.radar_rounded, color: Colors.cyanAccent, size: 15),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -799,7 +1178,11 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
                               children: [
                                 Text(
                                   'Nearest DWR: ${_satelliteRadarData!.nearestDwrStation!.name.split('(').first.trim()}',
-                                  style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w700),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                                 const SizedBox(width: 6),
                                 Container(
@@ -810,37 +1193,109 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
                                   ),
                                   child: Text(
                                     '${_satelliteRadarData!.distanceToNearestRadarKm?.round() ?? "--"} km',
-                                    style: const TextStyle(color: Colors.cyanAccent, fontSize: 9.5, fontWeight: FontWeight.bold),
+                                    style: const TextStyle(
+                                      color: Colors.cyanAccent,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
                             Text(
                               _satelliteRadarData!.localRadarCoverageStatus.split('(').first.trim(),
-                              style: const TextStyle(color: Colors.white70, fontSize: 10),
+                              style: const TextStyle(color: Colors.white70, fontSize: 9.5),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
                       ),
-                      const Icon(Icons.chevron_right_rounded, color: Colors.white54, size: 18),
+                      const Icon(Icons.chevron_right_rounded, color: Colors.white54, size: 16),
                     ],
                   ),
                 ),
               ),
             ),
 
-          // 4. INSAT Satellite Synoptic Interpretation Card (when a satellite layer is active)
-          if (_activeLayer.startsWith('insat_') && _satelliteRadarData != null) ...[
-            _buildSatelliteSynopticCard(mapCardBg, mapCardBorder),
-          ],
+          // 4. INSAT High-Res Inspection Chip (Context-sensitive: Visible on INSAT Layers)
+          if (_activeLayer.startsWith('insat_'))
+            Positioned(
+              top: 60,
+              right: 12,
+              child: GestureDetector(
+                onTap: () {
+                  final title = _activeLayer == 'insat_vis'
+                      ? 'INSAT-3DR Visible Cloud Albedo'
+                      : (_activeLayer == 'insat_wv'
+                          ? 'INSAT-3DR Tropospheric Water Vapor'
+                          : 'INSAT-3DR Thermal IR (Cloud Top Temperature)');
+                  _showHighResSatelliteViewer(context, insatImageUrl, title);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: mapCardBg,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFE040FB), width: 1),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        blurRadius: 6,
+                      ),
+                    ],
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.zoom_in_rounded, color: Color(0xFFE040FB), size: 14),
+                      SizedBox(width: 4),
+                      Text(
+                        'Full Res Satellite',
+                        style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
 
-          // 5. Scientific Legend Card
+          // 5. On-screen Zoom & Recenter Controls (Right Side)
           Positioned(
-            left: 16,
-            bottom: 90,
+            right: 12,
+            bottom: _activeLayer == 'precipitation' ? 95 : 30,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildMapControlBtn(
+                  icon: Icons.add,
+                  onTap: () {
+                    final zoom = _mapController.camera.zoom;
+                    _mapController.move(_mapController.camera.center, zoom + 1.0);
+                  },
+                ),
+                const SizedBox(height: 6),
+                _buildMapControlBtn(
+                  icon: Icons.remove,
+                  onTap: () {
+                    final zoom = _mapController.camera.zoom;
+                    _mapController.move(_mapController.camera.center, zoom - 1.0);
+                  },
+                ),
+                const SizedBox(height: 6),
+                _buildMapControlBtn(
+                  icon: Icons.my_location,
+                  onTap: () => _mapController.move(currentPoint, 8.0),
+                ),
+              ],
+            ),
+          ),
+
+          // 6. Dynamic Scientific Legend (Bottom Left)
+          Positioned(
+            left: 12,
+            bottom: _activeLayer == 'precipitation' ? 95 : 24,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               decoration: BoxDecoration(
                 color: mapCardBg,
                 borderRadius: BorderRadius.circular(10),
@@ -852,92 +1307,43 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
                 children: [
                   Text(
                     _getLegendTitle(),
-                    style: TextStyle(
-                      color: mapTextSecondary,
-                      fontSize: 10,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 9.5,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 5),
                   Container(
-                    width: 150,
-                    height: 8,
+                    width: 160,
+                    height: 6,
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(3),
                       gradient: LinearGradient(
                         colors: _getLegendGradient(),
                       ),
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(_getLegendMinLabel(), style: const TextStyle(color: Colors.white60, fontSize: 8.5)),
-                      const SizedBox(width: 30),
-                      Text(_getLegendMaxLabel(), style: const TextStyle(color: Colors.white60, fontSize: 8.5)),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // 6. Time-slider Control Bar
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 16,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: mapCardBg,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: mapCardBorder, width: 1),
-              ),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      _isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                      color: accentBlue,
-                      size: 26,
-                    ),
-                    onPressed: () => setState(() => _isPlaying = !_isPlaying),
-                  ),
-                  Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  SizedBox(
+                    width: 160,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('-2h Past', style: TextStyle(color: mapTextSecondary, fontSize: 10)),
-                            Text(
-                              _timelineValue < 0.5
-                                  ? 'Radar Replay'
-                                  : _timelineValue < 1.5
-                                      ? 'Live Now (ISRO/IMD)'
-                                      : '+6h NWP Forecast',
-                              style: TextStyle(color: accentBlue, fontSize: 11, fontWeight: FontWeight.w700),
-                            ),
-                            Text('+6h Forecast', style: TextStyle(color: mapTextSecondary, fontSize: 10)),
-                          ],
-                        ),
-                        SliderTheme(
-                          data: SliderTheme.of(context).copyWith(
-                            trackHeight: 3,
-                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                            activeTrackColor: accentBlue,
-                            inactiveTrackColor: Colors.white.withValues(alpha: 0.2),
-                            thumbColor: accentBlue,
+                        Flexible(
+                          child: Text(
+                            _getLegendMinLabel(),
+                            style: const TextStyle(color: Colors.white60, fontSize: 8),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          child: Slider(
-                            value: _timelineValue,
-                            min: 0.0,
-                            max: 2.0,
-                            onChanged: (val) => setState(() => _timelineValue = val),
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            _getLegendMaxLabel(),
+                            style: const TextStyle(color: Colors.white60, fontSize: 8),
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.end,
                           ),
                         ),
                       ],
@@ -947,96 +1353,163 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
               ),
             ),
           ),
+
+          // 7. Radar Replay Control Bar (Context-sensitive: Visible ONLY on Live Radar)
+          if (_activeLayer == 'precipitation')
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 16,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: mapCardBg,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: mapCardBorder, width: 1),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.35),
+                      blurRadius: 10,
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        _isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_filled_rounded,
+                        color: accentBlue,
+                        size: 32,
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: _radarFrames.isNotEmpty ? _togglePlayback : null,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('-2h Past', style: TextStyle(color: Colors.white60, fontSize: 9.5)),
+                              Text(
+                                _radarFrames.isNotEmpty
+                                    ? _radarFrames[_currentFrameIndex].formattedTime(DateTime.now())
+                                    : (_isLoadingRadarFrames ? 'Loading radar frames...' : 'Live Radar'),
+                                style: TextStyle(
+                                  color: accentBlue,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const Text('Live Now', style: TextStyle(color: Colors.white60, fontSize: 9.5)),
+                            ],
+                          ),
+                          SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              trackHeight: 3,
+                              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                              activeTrackColor: accentBlue,
+                              inactiveTrackColor: Colors.white.withValues(alpha: 0.2),
+                              thumbColor: accentBlue,
+                              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                            ),
+                            child: Slider(
+                              value: _radarFrames.isNotEmpty
+                                  ? _currentFrameIndex.toDouble()
+                                  : 0.0,
+                              min: 0.0,
+                              max: _radarFrames.isNotEmpty
+                                  ? (_radarFrames.length - 1).toDouble()
+                                  : 1.0,
+                              onChanged: _radarFrames.isNotEmpty ? _onSliderChanged : null,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildSatelliteSynopticCard(Color cardBg, Color cardBorder) {
-    MosdacSatelliteProductModel? product;
-    if (_satelliteRadarData != null && _satelliteRadarData!.satelliteProducts.isNotEmpty) {
-      if (_activeLayer == 'insat_ctt') {
-        product = _satelliteRadarData!.satelliteProducts.firstWhere(
-          (p) => p.productId == 'insat3dr_tir1_ctt',
-          orElse: () => _satelliteRadarData!.satelliteProducts.first,
-        );
-      } else if (_activeLayer == 'insat_wv') {
-        product = _satelliteRadarData!.satelliteProducts.firstWhere(
-          (p) => p.productId == 'insat3dr_wv',
-          orElse: () => _satelliteRadarData!.satelliteProducts.first,
-        );
-      } else if (_activeLayer == 'insat_vis') {
-        product = _satelliteRadarData!.satelliteProducts.firstWhere(
-          (p) => p.productId == 'insat3dr_vis',
-          orElse: () => _satelliteRadarData!.satelliteProducts.first,
-        );
-      }
-    }
-
-    if (product == null) return const SizedBox.shrink();
-
-    return Positioned(
-      bottom: 160,
-      left: 16,
-      right: 16,
+  Widget _buildMapControlBtn({
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        width: 36,
+        height: 36,
         decoration: BoxDecoration(
-          color: cardBg,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: cardBorder, width: 1),
+          color: Colors.grey.shade900.withValues(alpha: 0.9),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 0.8),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 10,
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 4,
             ),
           ],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Icon(icon, color: Colors.white, size: 18),
+      ),
+    );
+  }
+
+  Widget _buildLayerPill({
+    required String id,
+    required String label,
+    required IconData icon,
+    required Color color,
+  }) {
+    final isSelected = _activeLayer == id;
+    final bg = isSelected
+        ? color.withValues(alpha: 0.24)
+        : Colors.grey.shade900.withValues(alpha: 0.85);
+    final border = isSelected ? color : Colors.white.withValues(alpha: 0.15);
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _activeLayer = id;
+          if (_isPlaying) {
+            _playbackTimer?.cancel();
+            _isPlaying = false;
+          }
+        });
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: border, width: isSelected ? 1.5 : 0.8),
+          boxShadow: [
+            if (isSelected) BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 6),
+          ],
+        ),
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              children: [
-                const Icon(Icons.satellite_alt_rounded, color: Color(0xFFE040FB), size: 16),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    product.name,
-                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.purple.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    '${product.resolutionKm}km • ${product.refreshIntervalMin}m Cadence',
-                    style: const TextStyle(color: Color(0xFFE040FB), fontSize: 9.5, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
+            Icon(icon, color: isSelected ? color : Colors.white70, size: 14),
+            const SizedBox(width: 5),
             Text(
-              product.synopticInterpretation,
-              style: const TextStyle(color: Colors.white70, fontSize: 11, height: 1.3),
-            ),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Payload: ${product.satellite} • ${product.channelWavelength}',
-                  style: const TextStyle(color: Colors.grey, fontSize: 9.5),
-                ),
-                const Text(
-                  'ISRO MOSDAC Verified',
-                  style: TextStyle(color: Colors.cyanAccent, fontSize: 9.5, fontWeight: FontWeight.w600),
-                ),
-              ],
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.white70,
+                fontSize: 11.5,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+              ),
             ),
           ],
         ),
@@ -1047,9 +1520,9 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
   String _getLegendTitle() {
     switch (_activeLayer) {
       case 'precipitation':
-        return 'Precipitation Rate (mm/h)';
+        return 'Precipitation (mm/h & dBZ)';
       case 'imd_dwr':
-        return 'IMD Radar Reflectivity (dBZ)';
+        return 'IMD Doppler Reflectivity (dBZ)';
       case 'insat_ctt':
         return 'Cloud Top Temp (°C)';
       case 'insat_wv':
@@ -1060,22 +1533,40 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
         return 'Crowdsourced Ground Hazards';
       case 'alerts':
       default:
-        return 'IMD Alert Severity';
+        return 'IMD / NDMA Alert Severity';
     }
   }
 
   List<Color> _getLegendGradient() {
     switch (_activeLayer) {
       case 'precipitation':
-        return [Colors.blue.shade900, Colors.cyan, Colors.yellow, Colors.red];
+        return [Colors.blue.shade900, Colors.cyan, Colors.yellow, Colors.orange, Colors.red];
       case 'imd_dwr':
         return [Colors.blue.shade700, Colors.green, Colors.yellow, Colors.orange, Colors.red, Colors.purple];
       case 'insat_ctt':
-        return [const Color(0xFF311B92), const Color(0xFF1565C0), const Color(0xFF00ACC1), const Color(0xFF43A047), const Color(0xFFFDD835), const Color(0xFFE53935)];
+        return [
+          const Color(0xFF311B92),
+          const Color(0xFF1565C0),
+          const Color(0xFF00ACC1),
+          const Color(0xFF43A047),
+          const Color(0xFFFDD835),
+          const Color(0xFFE53935)
+        ];
       case 'insat_wv':
-        return [const Color(0xFF212121), const Color(0xFF37474F), const Color(0xFF0277BD), const Color(0xFF29B6F6), const Color(0xFFE1F5FE)];
+        return [
+          const Color(0xFF212121),
+          const Color(0xFF37474F),
+          const Color(0xFF0277BD),
+          const Color(0xFF29B6F6),
+          const Color(0xFFE1F5FE)
+        ];
       case 'insat_vis':
-        return [const Color(0xFF1A1A1A), const Color(0xFF616161), const Color(0xFFBDBDBD), Colors.white];
+        return [
+          const Color(0xFF1A1A1A),
+          const Color(0xFF616161),
+          const Color(0xFFBDBDBD),
+          Colors.white
+        ];
       case 'citizen':
         return [Colors.blue, Colors.teal, Colors.amber, Colors.purple];
       case 'alerts':
@@ -1087,7 +1578,7 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
   String _getLegendMinLabel() {
     switch (_activeLayer) {
       case 'precipitation':
-        return '0.5 mm/h';
+        return '0.5 mm/h (10 dBZ)';
       case 'imd_dwr':
         return '10 dBZ (Virga)';
       case 'insat_ctt':
@@ -1107,7 +1598,7 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
   String _getLegendMaxLabel() {
     switch (_activeLayer) {
       case 'precipitation':
-        return '50+ mm/h';
+        return '50+ mm/h (65 dBZ)';
       case 'imd_dwr':
         return '65+ dBZ (Hail)';
       case 'insat_ctt':
@@ -1122,49 +1613,5 @@ class _WeatherMapScreenState extends State<WeatherMapScreen> {
       default:
         return 'Warning';
     }
-  }
-
-  Widget _buildLayerPill({
-    required String id,
-    required String label,
-    required IconData icon,
-    required Color color,
-  }) {
-    final isSelected = _activeLayer == id;
-    final bg = isSelected
-        ? color.withValues(alpha: 0.22)
-        : Colors.grey.shade900.withValues(alpha: 0.85);
-    final border = isSelected ? color : Colors.white.withValues(alpha: 0.15);
-
-    return InkWell(
-      onTap: () => setState(() => _activeLayer = id),
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: border, width: isSelected ? 1.5 : 0.8),
-          boxShadow: [
-            if (isSelected) BoxShadow(color: color.withValues(alpha: 0.35), blurRadius: 8),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: isSelected ? color : Colors.white70, size: 15),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? Colors.white : Colors.white70,
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

@@ -60,3 +60,22 @@ class VoiceQueryResponse(BaseModel):
     detected_language: str
     chat_response: ChatQueryResponse
     audio_base64: Optional[str] = None
+
+
+class LiveSessionInitRequest(BaseModel):
+    language: str = Field("en", description="Target language ('en', 'ta', 'hi')")
+    latitude: Optional[float] = Field(None, ge=-90.0, le=90.0)
+    longitude: Optional[float] = Field(None, ge=-180.0, le=180.0)
+    location_name: Optional[str] = Field(None, description="Contextual location hint")
+    session_id: Optional[str] = Field(None, description="Optional UUID for conversation session")
+
+
+class LiveSessionInitResponse(BaseModel):
+    session_id: str
+    greeting_text: str
+    system_prompt: str
+    weather_card: Optional[WeatherCardSummary] = None
+    suggested_voice_prompts: List[str] = []
+    audio_base64: Optional[str] = None
+    detected_language: str = "en"
+

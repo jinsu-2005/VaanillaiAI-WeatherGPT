@@ -672,31 +672,56 @@ class _RiverBasinHydroScreenState extends State<RiverBasinHydroScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Downstream Riparian Directives',
-                style: TextStyle(
-                  color: textPrimary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Row(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final chips = [
+                _buildLangChip('EN', 'en', isDark),
+                const SizedBox(width: 4),
+                _buildLangChip('தமிழ்', 'ta', isDark),
+                const SizedBox(width: 4),
+                _buildLangChip('हिंदी', 'hi', isDark),
+                const SizedBox(width: 4),
+                _buildLangChip('বাংলা', 'bn', isDark),
+                const SizedBox(width: 4),
+                _buildLangChip('অসমীয়া', 'as', isDark),
+              ];
+
+              if (constraints.maxWidth < 450) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Downstream Riparian Directives',
+                      style: TextStyle(
+                        color: textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(children: chips),
+                    ),
+                  ],
+                );
+              }
+
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildLangChip('EN', 'en', isDark),
-                  const SizedBox(width: 4),
-                  _buildLangChip('தமிழ்', 'ta', isDark),
-                  const SizedBox(width: 4),
-                  _buildLangChip('हिंदी', 'hi', isDark),
-                  const SizedBox(width: 4),
-                  _buildLangChip('বাংলা', 'bn', isDark),
-                  const SizedBox(width: 4),
-                  _buildLangChip('অসমীয়া', 'as', isDark),
+                  Text(
+                    'Downstream Riparian Directives',
+                    style: TextStyle(
+                      color: textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Row(children: chips),
                 ],
-              ),
-            ],
+              );
+            },
           ),
           const SizedBox(height: 12),
           Container(

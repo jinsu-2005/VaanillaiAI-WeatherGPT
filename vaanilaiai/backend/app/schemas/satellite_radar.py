@@ -20,6 +20,8 @@ class DwrRadarStation(BaseModel):
     convective_cells_detected: int = Field(0, description="Count of active convective precipitation cells tracked")
     storm_motion_heading_deg: Optional[float] = Field(None, description="Convective cell movement heading in degrees azimuth (0-360)")
     storm_motion_speed_kmh: Optional[float] = Field(None, description="Estimated storm cell displacement velocity in km/h")
+    station_code: Optional[str] = Field(None, description="Official IMD radar station short code (e.g. tvm, cni, mum)")
+    radar_image_url: Optional[str] = Field(None, description="Direct URL to IMD live Doppler radar sweep GIF")
 
 
 class MosdacSatelliteProduct(BaseModel):

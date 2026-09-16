@@ -21,6 +21,36 @@ import 'marine_ocean_screen.dart';
 import 'river_basin_hydro_screen.dart';
 import 'monsoon_teleconnections_screen.dart';
 import 'cyclone_tracker_screen.dart';
+import 'fog_nowcast_screen.dart';
+import 'coldwave_screen.dart';
+import 'pest_forewarning_screen.dart';
+import 'avalanche_snow_screen.dart';
+import 'convective_storm_screen.dart';
+import 'drought_monitor_screen.dart';
+import 'marine_heatwave_screen.dart';
+import 'cloudburst_screen.dart';
+import 'hazmat_screen.dart';
+import 'forest_fire_screen.dart';
+import 'heat_action_plan_screen.dart';
+import 'tsunami_screen.dart';
+import 'crop_water_stress_screen.dart';
+import 'storm_surge_screen.dart';
+import 'ocean_state_screen.dart';
+import 'livestock_heat_stress_screen.dart';
+import 'earthquake_screen.dart';
+import 'solar_energy_screen.dart';
+import 'lightning_cell_screen.dart';
+import 'wind_energy_screen.dart';
+import 'glof_screen.dart';
+import 'oil_spill_screen.dart';
+import 'urban_heat_island_screen.dart';
+import 'potential_fishing_zone_screen.dart';
+import 'extended_range_prediction_screen.dart';
+import 'snowmelt_runoff_screen.dart';
+import 'agri_storage_screen.dart';
+import 'flash_drought_screen.dart';
+import 'hydro_rating_screen.dart';
+import 'saltwater_intrusion_screen.dart';
 
 class MoreScreen extends StatelessWidget {
   final Function(int) onNavigateTab;
@@ -268,6 +298,77 @@ class MoreScreen extends StatelessWidget {
 
             const SizedBox(height: 20),
 
+            // ── Section: Plan to Add ──────────────────────────────────────
+            _sectionHeader('Plan to add', textSecondary),
+            const SizedBox(height: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: surfaceColor,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: borderColor),
+              ),
+              child: Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  leading: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: Colors.purple.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.science_rounded, color: Colors.purpleAccent, size: 20),
+                  ),
+                  title: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          'Upcoming Features',
+                          style: TextStyle(
+                            color: textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.purple.withValues(alpha: 0.3)),
+                        ),
+                        child: const Text(
+                          '30 Demos',
+                          style: TextStyle(
+                            color: Colors.purpleAccent,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  subtitle: Text(
+                    'Preview upcoming models, radar engines & disaster telemetry',
+                    style: TextStyle(
+                      color: textSecondary,
+                      fontSize: 11.5,
+                    ),
+                  ),
+                  children: [
+                    Divider(height: 1, color: borderColor),
+                    ..._buildPlanToAddItems(context, textPrimary, textSecondary, borderColor),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
             // ── Section: Account & Settings ──────────────────────────────
             _sectionHeader('Account & Settings', textSecondary),
             const SizedBox(height: 8),
@@ -381,6 +482,224 @@ class MoreScreen extends StatelessWidget {
         }),
       ),
     );
+  }
+
+  List<Widget> _buildPlanToAddItems(BuildContext context, Color textPrimary,
+      Color textSecondary, Color borderColor) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final items = [
+      _MenuItem(Icons.foggy, 'FogPass & Highway Visibility Nowcast',
+          Colors.purpleAccent, () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const FogNowcastScreen()));
+      }),
+      _MenuItem(Icons.ac_unit_rounded, 'Cold Wave & Ground Frost Vulnerability',
+          const Color(0xFF38BDF8), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const ColdWaveScreen()));
+      }),
+      _MenuItem(Icons.bug_report_rounded, 'Pest & Disease Forewarning (GKMS)',
+          Colors.lightGreen, () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const PestForewarningScreen()));
+      }),
+      _MenuItem(Icons.terrain_rounded, 'Himalayan Snow & Avalanche (DGRE)',
+          const Color(0xFF0EA5E9), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const AvalancheSnowScreen()));
+      }),
+      _MenuItem(Icons.flash_on_rounded, 'Severe Storms & Haboobs (Kalbaishakhi)',
+          Colors.amber, () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const ConvectiveStormScreen()));
+      }),
+      _MenuItem(Icons.grass_rounded, 'Drought & Soil Moisture (CGWB)',
+          Colors.orange, () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const DroughtMonitorScreen()));
+      }),
+      _MenuItem(Icons.water_rounded, 'Marine Heatwaves & Coral Bleaching (INCOIS)',
+          Colors.cyanAccent, () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const MarineHeatwaveScreen()));
+      }),
+      _MenuItem(Icons.landslide_rounded, 'Cloudburst & Landslide Debris Flow (GSI/IMD)',
+          Colors.orangeAccent, () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const CloudburstScreen()));
+      }),
+      _MenuItem(Icons.science_rounded, 'Industrial Hazmat & Toxic Plume (CPCB/NDMA)',
+          const Color(0xFFF59E0B), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const HazmatScreen()));
+      }),
+      _MenuItem(Icons.local_fire_department_rounded, 'Forest Fire & Van Agni FWI (FSI/ISRO)',
+          const Color(0xFFF97316), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const ForestFireScreen()));
+      }),
+      _MenuItem(Icons.sunny, 'Heat Action Plan & Solar UV (NDMA/IMD)',
+          const Color(0xFFEA580C), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const HeatActionPlanScreen()));
+      }),
+      _MenuItem(Icons.tsunami_rounded, 'Indian Tsunami Early Warning (INCOIS/ITEWS)',
+          const Color(0xFF06B6D4), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const TsunamiScreen()));
+      }),
+      _MenuItem(Icons.grass_rounded, 'Crop Water Stress & Soil Moisture (ICAR/IMD)',
+          const Color(0xFF10B981), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const CropWaterStressScreen()));
+      }),
+      _MenuItem(Icons.flood_rounded, 'Storm Surge & Tidal Inundation (INCOIS/IMD)',
+          const Color(0xFF38BDF8), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const StormSurgeScreen()));
+      }),
+      _MenuItem(Icons.waves_rounded, 'Ocean State Forecast & Rip Currents (INCOIS/OSF)',
+          const Color(0xFF06B6D4), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const OceanStateScreen()));
+      }),
+      _MenuItem(Icons.pets_rounded, 'Livestock Thermal Stress & THI (ICAR/NDRI)',
+          const Color(0xFFF97316), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const LivestockHeatStressScreen()));
+      }),
+      _MenuItem(Icons.vibration_rounded, 'Earthquake Seismology & Aftershocks (NCS/NDMA)',
+          const Color(0xFFEF4444), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const EarthquakeScreen()));
+      }),
+      _MenuItem(Icons.wb_sunny_rounded, 'Solar Radiation & Rooftop PV Yield (NISE/IMD)',
+          const Color(0xFFF59E0B), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const SolarEnergyScreen()));
+      }),
+      _MenuItem(Icons.flash_on_rounded, 'Lightning Cell & Downburst Radar (IITM/IMD)',
+          const Color(0xFFEF4444), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const LightningCellScreen()));
+      }),
+      _MenuItem(Icons.wind_power_rounded, 'Wind Resource & Hub-Height Atlas (NIWE/IMD)',
+          const Color(0xFF00B4D8), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const WindEnergyScreen()));
+      }),
+      _MenuItem(Icons.water_damage_rounded, 'Himalayan GLOF Early Warning (NRSC/CWC)',
+          const Color(0xFF38BDF8), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const GlofScreen()));
+      }),
+      _MenuItem(Icons.oil_barrel_rounded, 'Marine Oil Spill & Habitat Radar (INCOIS/ICG)',
+          const Color(0xFF00B4D8), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const OilSpillScreen()));
+      }),
+      _MenuItem(Icons.roofing_rounded, 'Urban Heat Island & Cool Roof Engine (IMD/NDMA)',
+          const Color(0xFFEA580C), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const UrbanHeatIslandScreen()));
+      }),
+      _MenuItem(Icons.set_meal_rounded, 'Potential Fishing Zone & Ocean Color (INCOIS/CMFRI)',
+          const Color(0xFF0284C7), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const PotentialFishingZoneScreen()));
+      }),
+      _MenuItem(Icons.calendar_month_rounded, 'Monsoon Extended Range Prediction (IITM/NCMRWF)',
+          const Color(0xFF0284C7), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const ExtendedRangePredictionScreen()));
+      }),
+      _MenuItem(Icons.terrain_rounded, 'Himalayan Snowmelt Runoff & Glaciers (IMD/CWC)',
+          const Color(0xFF06B6D4), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const SnowmeltRunoffScreen()));
+      }),
+      _MenuItem(Icons.grain, 'Mandi Storage & Grain Defense (IMD/ICAR)',
+          const Color(0xFFF59E0B), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const AgriStorageScreen()));
+      }),
+      _MenuItem(Icons.water_damage_rounded, 'Flash Drought & Soil Desiccation (IMD/CWC)',
+          const Color(0xFFEA580C), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const FlashDroughtScreen()));
+      }),
+      _MenuItem(Icons.flood_rounded, 'CWC Flood Rating & Embankments (CWC/IMD)',
+          const Color(0xFF0284C7), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const HydroRatingScreen()));
+      }),
+      _MenuItem(Icons.water, 'Coastal Saline Intrusion & Aquifers (INCOIS/CGWB)',
+          const Color(0xFF0284C7), () {
+        Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const SaltwaterIntrusionScreen()));
+      }),
+    ];
+
+    return List.generate(items.length, (index) {
+      final item = items[index];
+      final isLast = index == items.length - 1;
+      return Column(
+        children: [
+          ListTile(
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+            leading: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: item.iconColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(item.icon, color: item.iconColor, size: 20),
+            ),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    item.title,
+                    style: TextStyle(
+                        color: textPrimary,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.purple.withValues(alpha: 0.25)),
+                  ),
+                  child: const Text(
+                    'Demo',
+                    style: TextStyle(
+                      color: Colors.purpleAccent,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            trailing: Icon(Icons.chevron_right_rounded,
+                color: AppColors.textTertiaryC(isDark),
+                size: 20),
+            onTap: item.onTap,
+          ),
+          if (!isLast)
+            Divider(
+                height: 1,
+                color: borderColor,
+                indent: 62,
+                endIndent: 0),
+        ],
+      );
+    });
   }
 
   void _showProfileDialog(BuildContext context, AuthProvider auth) {

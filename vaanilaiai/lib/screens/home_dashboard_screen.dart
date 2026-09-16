@@ -21,6 +21,7 @@ import 'urban_flood_screen.dart';
 import 'multi_model_nwp_screen.dart';
 import '../widgets/skeleton_loading.dart';
 import '../widgets/data_source_indicator.dart';
+import '../widgets/network_status_badge.dart';
 
 class HomeDashboardScreen extends StatefulWidget {
   final Function(int) onNavigateTab;
@@ -123,6 +124,8 @@ class _HomeDashboardScreenState extends State<HomeDashboardScreen> {
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
+              const NetworkStatusBadge(),
             ],
           ),
         ),

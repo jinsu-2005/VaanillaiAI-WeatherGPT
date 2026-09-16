@@ -331,14 +331,40 @@ class SatelliteRadarService:
         c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
         return round(r_earth_km * c, 1)
 
+    _STATION_CODE_MAP = {
+        "dwr_chennai_sriharikota": "cni",
+        "dwr_chennai_meenambakkam": "cni",
+        "dwr_mumbai_colaba": "mum",
+        "dwr_mumbai_veravali": "mum",
+        "dwr_delhi_palam": "delhi",
+        "dwr_delhi_lodhi": "delhi",
+        "dwr_kolkata_alipore": "kol",
+        "dwr_machilipatnam": "vsk",
+        "dwr_visakhapatnam": "vsk",
+        "dwr_kochi": "koc",
+        "dwr_thiruvananthapuram": "tvm",
+        "dwr_hyderabad": "hyd",
+        "dwr_nagpur": "ngp",
+        "dwr_bhopal": "bhp",
+        "dwr_jaipur": "jpr",
+        "dwr_patna": "kol",
+        "dwr_agartala": "agt",
+        "dwr_cherrapunji": "shr",
+        "dwr_srinagar": "srn",
+        "dwr_mukteshwar": "delhi",
+    }
+
     def get_dwr_stations(self) -> List[DwrRadarStation]:
-        """Return the active IMD DWR network with current UTC sweep timestamps."""
+        """Return the active IMD DWR network with current UTC sweep timestamps and live radar URLs."""
         now = datetime.now(timezone.utc)
         stations: List[DwrRadarStation] = []
         for raw in self._DWR_STATIONS_CATALOG:
+            sid = raw["station_id"]
+            code = raw.get("station_code") or self._STATION_CODE_MAP.get(sid, "delhi")
+            radar_img = raw.get("radar_image_url") or f"https://mausam.imd.gov.in/Radar/caz_{code}.gif"
             stations.append(
                 DwrRadarStation(
-                    station_id=raw["station_id"],
+                    station_id=sid,
                     name=raw["name"],
                     state=raw["state"],
                     latitude=raw["latitude"],
@@ -352,6 +378,8 @@ class SatelliteRadarService:
                     convective_cells_detected=raw["convective_cells_detected"],
                     storm_motion_heading_deg=raw["storm_motion_heading_deg"],
                     storm_motion_speed_kmh=raw["storm_motion_speed_kmh"],
+                    station_code=code,
+                    radar_image_url=radar_img,
                 )
             )
         return stations
@@ -403,8 +431,8 @@ class SatelliteRadarService:
                     "Identifies deep convective thunderstorm towers and tropical cyclogenesis. "
                     "Cloud top temperatures colder than -40°C indicate vigorous vertical updrafts with high rain rates."
                 ),
-                tile_or_image_url="https://mosdac.gov.in/insat3dr/tir1_ctt_latest.png",
-                bounds=[-10.0, 45.0, 45.0, 110.0],
+                tile_or_image_url="https://mausam.imd.gov.in/Satellite/3Dasiasec_ir1.jpg",
+                bounds=[-10.0, 40.0, 45.0, 115.0],
             ),
             MosdacSatelliteProduct(
                 product_id="insat3dr_wv",
@@ -422,8 +450,8 @@ class SatelliteRadarService:
                     "Tracks mid-to-upper tropospheric moisture (400-600 hPa). Bright plumes depict "
                     "monsoonal moisture surges and Western Disturbance troughs feeding convection."
                 ),
-                tile_or_image_url="https://mosdac.gov.in/insat3dr/wv_latest.png",
-                bounds=[-10.0, 45.0, 45.0, 110.0],
+                tile_or_image_url="https://mausam.imd.gov.in/Satellite/3Dasiasec_wv.jpg",
+                bounds=[-10.0, 40.0, 45.0, 115.0],
             ),
             MosdacSatelliteProduct(
                 product_id="insat3dr_vis",
@@ -441,8 +469,8 @@ class SatelliteRadarService:
                     "High-resolution 1km daytime solar reflectance. Accurately pinpoints low-level fog, "
                     "smoke haze across Indo-Gangetic plains, and dense storm anvil structures."
                 ),
-                tile_or_image_url="https://mosdac.gov.in/insat3dr/vis_latest.png",
-                bounds=[-10.0, 45.0, 45.0, 110.0],
+                tile_or_image_url="https://mausam.imd.gov.in/Satellite/3Dasiasec_vis.jpg",
+                bounds=[-10.0, 40.0, 45.0, 115.0],
             ),
             MosdacSatelliteProduct(
                 product_id="insat3dr_rgb",
@@ -460,8 +488,8 @@ class SatelliteRadarService:
                     "Multi-spectral composite separating liquid water clouds (warm shades) from glaciated "
                     "ice crystal anvils (bright yellow/red), vital for squall line and cyclone eye monitoring."
                 ),
-                tile_or_image_url="https://mosdac.gov.in/insat3dr/rgb_composite_latest.png",
-                bounds=[-10.0, 45.0, 45.0, 110.0],
+                tile_or_image_url="https://mausam.imd.gov.in/Satellite/3Dasiasec_ir1.jpg",
+                bounds=[-10.0, 40.0, 45.0, 115.0],
             ),
         ]
 

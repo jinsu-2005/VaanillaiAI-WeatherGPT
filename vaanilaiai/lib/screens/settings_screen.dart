@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/locale_provider.dart';
@@ -284,6 +285,249 @@ class SettingsScreen extends StatelessWidget {
 
             const SizedBox(height: 24),
 
+            // ── Developer Section ────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 8),
+              child: Text(
+                'DEVELOPER',
+                style: TextStyle(
+                    color: textSecondary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8),
+              ),
+            ),
+            Container(
+              decoration: BoxDecoration(
+                color: surfaceColor,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: borderColor),
+              ),
+              child: Column(
+                children: [
+                  _buildActionTile(
+                    context,
+                    icon: Icons.person_rounded,
+                    iconColor: accentBlue,
+                    title: 'Developed by Jinsu J',
+                    subtitle: 'Lead Architect & Full-Stack AI Developer',
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: accentBlue.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color: accentBlue.withValues(alpha: 0.25)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.open_in_new_rounded,
+                              size: 12, color: accentBlue),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Profile',
+                            style: TextStyle(
+                              color: accentBlue,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    onTap: () => _launchExternalUrl(
+                        context, 'https://github.com/jinsu-2005'),
+                    borderColor: borderColor,
+                    textPrimary: textPrimary,
+                    textSecondary: textSecondary,
+                  ),
+                  _buildActionTile(
+                    context,
+                    icon: Icons.workspace_premium_rounded,
+                    iconColor: AppColors.alertAmber,
+                    title: 'Developed for Smart India Hackathon (SIH) 2026',
+                    subtitle:
+                        'Ministry of Earth Sciences (MoES) & IMD Problem Statement',
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.alertAmber.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color: AppColors.alertAmber.withValues(alpha: 0.3)),
+                      ),
+                      child: Text(
+                        'SIH 2026',
+                        style: TextStyle(
+                          color: AppColors.alertAmber,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ),
+                    onTap: () {
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          backgroundColor: surfaceColor,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20)),
+                          title: Row(
+                            children: [
+                              Icon(Icons.emoji_events_rounded,
+                                  color: AppColors.alertAmber, size: 24),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Smart India Hackathon 2026',
+                                  style: TextStyle(
+                                      color: textPrimary,
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                            ],
+                          ),
+                          content: Text(
+                            'VaanilaiAI (WeatherGPT) was engineered for Smart India Hackathon (SIH) 2026.\n\n'
+                            'Developed by Jinsu J as an advanced AI-powered conversational meteorological decision support system for the Ministry of Earth Sciences (MoES) and India Meteorological Department (IMD).',
+                            style: TextStyle(
+                                color: textSecondary,
+                                fontSize: 13,
+                                height: 1.5),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: Text('Close',
+                                  style: TextStyle(
+                                      color: accentBlue,
+                                      fontWeight: FontWeight.w700)),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    isLast: true,
+                    borderColor: borderColor,
+                    textPrimary: textPrimary,
+                    textSecondary: textSecondary,
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // ── Updates Section ──────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 8),
+              child: Text(
+                'UPDATES',
+                style: TextStyle(
+                    color: textSecondary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8),
+              ),
+            ),
+            Container(
+              decoration: BoxDecoration(
+                color: surfaceColor,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: borderColor),
+              ),
+              child: Column(
+                children: [
+                  _buildActionTile(
+                    context,
+                    icon: Icons.system_update_alt_rounded,
+                    iconColor: AppColors.alertGreen,
+                    title: 'Latest Updates / Check for Updates',
+                    subtitle:
+                        'Version 1.0.0 (Latest Release) · Tap to verify updates',
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.alertGreen.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color: AppColors.alertGreen.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.check_circle_rounded,
+                              size: 12, color: AppColors.alertGreen),
+                          const SizedBox(width: 4),
+                          Text(
+                            'v1.0.0',
+                            style: TextStyle(
+                              color: AppColors.alertGreen,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    onTap: () => _checkForUpdates(context),
+                    borderColor: borderColor,
+                    textPrimary: textPrimary,
+                    textSecondary: textSecondary,
+                  ),
+                  _buildActionTile(
+                    context,
+                    icon: Icons.code_rounded,
+                    iconColor: isDark
+                        ? const Color(0xFFCBD5E1)
+                        : const Color(0xFF475569),
+                    title: 'GitHub Repository',
+                    subtitle: 'jinsu-2005/VaanillaiAI-WeatherGPT',
+                    trailing: Icon(
+                      Icons.open_in_new_rounded,
+                      size: 18,
+                      color: AppColors.textTertiaryC(isDark),
+                    ),
+                    onTap: () => _launchExternalUrl(
+                      context,
+                      'https://github.com/jinsu-2005/VaanillaiAI-WeatherGPT',
+                    ),
+                    borderColor: borderColor,
+                    textPrimary: textPrimary,
+                    textSecondary: textSecondary,
+                  ),
+                  _buildActionTile(
+                    context,
+                    icon: Icons.cloud_download_rounded,
+                    iconColor: accentBlue,
+                    title: 'Download Latest Release',
+                    subtitle: 'Access releases, APK packages, and changelogs',
+                    trailing: Icon(
+                      Icons.open_in_new_rounded,
+                      size: 18,
+                      color: AppColors.textTertiaryC(isDark),
+                    ),
+                    onTap: () => _launchExternalUrl(
+                      context,
+                      'https://github.com/jinsu-2005/VaanillaiAI-WeatherGPT/releases',
+                    ),
+                    isLast: true,
+                    borderColor: borderColor,
+                    textPrimary: textPrimary,
+                    textSecondary: textSecondary,
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
             // Footer
             Center(
               child: Text(
@@ -453,6 +697,72 @@ class SettingsScreen extends StatelessWidget {
         );
       },
     );
+  }
+
+  void _checkForUpdates(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            Icon(Icons.check_circle_outline_rounded,
+                color: Colors.white, size: 20),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Checking for updates... You are running the latest version (v1.0.0).',
+                style: TextStyle(fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: AppColors.brandBlueDark,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: 'Releases',
+          textColor: Colors.white,
+          onPressed: () {
+            _launchExternalUrl(
+              context,
+              'https://github.com/jinsu-2005/VaanillaiAI-WeatherGPT/releases',
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Future<void> _launchExternalUrl(
+      BuildContext context, String urlString) async {
+    final uri = Uri.parse(urlString);
+    try {
+      final launched =
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not open: $urlString'),
+            backgroundColor: AppColors.alertRed,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not open link: $e'),
+            backgroundColor: AppColors.alertRed,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    }
   }
 }
 

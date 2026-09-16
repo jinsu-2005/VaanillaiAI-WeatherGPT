@@ -255,9 +255,13 @@ class _CycloneTrackerScreenState extends State<CycloneTrackerScreen> {
           children: [
             const Icon(Icons.cyclone_rounded, size: 16, color: AppColors.brandBlue),
             const SizedBox(width: 6),
-            Text(
-              'Select Monitored Storm / Reference Scenario:',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textSecondary),
+            Expanded(
+              child: Text(
+                'Select Monitored Storm / Reference Scenario:',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textSecondary),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -339,41 +343,49 @@ class _CycloneTrackerScreenState extends State<CycloneTrackerScreen> {
         children: [
           // Header Row
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Icon(Icons.cyclone_rounded, size: 36, color: stageColor),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'CYCLONE ${system.name}',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.1,
-                          color: textPrimary,
-                        ),
+              Icon(Icons.cyclone_rounded, size: 34, color: stageColor),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'CYCLONE ${system.name}',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.0,
+                        color: textPrimary,
                       ),
-                      Text(
-                        'Basin: ${system.basin}',
-                        style: TextStyle(fontSize: 12, color: textSecondary, fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: stageColor,
-                  borderRadius: BorderRadius.circular(12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Basin: ${system.basin}',
+                      style: TextStyle(fontSize: 12, color: textSecondary, fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
-                child: Text(
-                  system.warningStage,
-                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: stageColor,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    system.warningStage,
+                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    maxLines: 2,
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ),
             ],
@@ -453,51 +465,75 @@ class _CycloneTrackerScreenState extends State<CycloneTrackerScreen> {
           const Divider(height: 1),
           const SizedBox(height: 14),
 
-          // 4-Column Physics Telemetry Grid
-          Row(
-            children: [
-              Expanded(
-                child: _buildMetricTile(
-                  'Central Deficit (ΔP)',
-                  '${dvorak.pressureDeficitHpa.toStringAsFixed(1)} hPa',
-                  Icons.compress_rounded,
-                  Colors.deepOrange,
-                  textPrimary,
-                  textSecondary,
-                ),
-              ),
-              Expanded(
-                child: _buildMetricTile(
-                  'Central Press (Pc)',
-                  '${dvorak.centralPressureHpa.toStringAsFixed(0)} hPa',
-                  Icons.speed_rounded,
-                  Colors.blueGrey,
-                  textPrimary,
-                  textSecondary,
-                ),
-              ),
-              Expanded(
-                child: _buildMetricTile(
-                  'Max Sustained',
-                  '${dvorak.maxSustainedWindKmh.toStringAsFixed(0)} km/h',
-                  Icons.air_rounded,
-                  Colors.blue,
-                  textPrimary,
-                  textSecondary,
-                  subtitle: '${dvorak.maxSustainedWindKt.toStringAsFixed(0)} kt',
-                ),
-              ),
-              Expanded(
-                child: _buildMetricTile(
-                  'Peak Gusts',
-                  '${dvorak.gustSpeedKmh.toStringAsFixed(0)} km/h',
-                  Icons.storm_rounded,
-                  AppColors.alertRed,
-                  textPrimary,
-                  textSecondary,
-                ),
-              ),
-            ],
+          // Responsive Physics Telemetry Grid
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth > 520;
+              final deficitTile = _buildMetricTile(
+                'Central Deficit (ΔP)',
+                '${dvorak.pressureDeficitHpa.toStringAsFixed(1)} hPa',
+                Icons.compress_rounded,
+                Colors.deepOrange,
+                textPrimary,
+                textSecondary,
+              );
+              final pressureTile = _buildMetricTile(
+                'Central Press (Pc)',
+                '${dvorak.centralPressureHpa.toStringAsFixed(0)} hPa',
+                Icons.speed_rounded,
+                Colors.blueGrey,
+                textPrimary,
+                textSecondary,
+              );
+              final sustainedTile = _buildMetricTile(
+                'Max Sustained',
+                '${dvorak.maxSustainedWindKmh.toStringAsFixed(0)} km/h',
+                Icons.air_rounded,
+                Colors.blue,
+                textPrimary,
+                textSecondary,
+                subtitle: '${dvorak.maxSustainedWindKt.toStringAsFixed(0)} kt',
+              );
+              final gustsTile = _buildMetricTile(
+                'Peak Gusts',
+                '${dvorak.gustSpeedKmh.toStringAsFixed(0)} km/h',
+                Icons.storm_rounded,
+                AppColors.alertRed,
+                textPrimary,
+                textSecondary,
+              );
+
+              if (isWide) {
+                return Row(
+                  children: [
+                    Expanded(child: deficitTile),
+                    Expanded(child: pressureTile),
+                    Expanded(child: sustainedTile),
+                    Expanded(child: gustsTile),
+                  ],
+                );
+              } else {
+                return Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: deficitTile),
+                        const SizedBox(width: 12),
+                        Expanded(child: pressureTile),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(child: sustainedTile),
+                        const SizedBox(width: 12),
+                        Expanded(child: gustsTile),
+                      ],
+                    ),
+                  ],
+                );
+              }
+            },
           ),
         ],
       ),
@@ -534,11 +570,15 @@ class _CycloneTrackerScreenState extends State<CycloneTrackerScreen> {
         Text(
           value,
           style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: textPrimary),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         if (subtitle != null) ...[
           Text(
             subtitle,
             style: TextStyle(fontSize: 10, color: textSecondary),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ],
@@ -567,12 +607,16 @@ class _CycloneTrackerScreenState extends State<CycloneTrackerScreen> {
             children: [
               const Icon(Icons.near_me_rounded, color: AppColors.brandBlue, size: 18),
               const SizedBox(width: 8),
-              Text(
-                'Landfall Trajectory & Geodetic Proximity',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textPrimary),
+              Expanded(
+                child: Text(
+                  'Landfall Trajectory & Geodetic Proximity',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: textPrimary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const Spacer(),
-              if (system.distanceToUserKm != null)
+              if (system.distanceToUserKm != null) ...[
+                const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
@@ -584,6 +628,7 @@ class _CycloneTrackerScreenState extends State<CycloneTrackerScreen> {
                     style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.brandBlue),
                   ),
                 ),
+              ],
             ],
           ),
           const SizedBox(height: 12),
@@ -635,7 +680,14 @@ class _CycloneTrackerScreenState extends State<CycloneTrackerScreen> {
           children: [
             Icon(icon, size: 14, color: iconColor),
             const SizedBox(width: 4),
-            Text(label, style: TextStyle(fontSize: 11, color: textSecondary, fontWeight: FontWeight.w600)),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(fontSize: 11, color: textSecondary, fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 4),
@@ -668,13 +720,17 @@ class _CycloneTrackerScreenState extends State<CycloneTrackerScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.tsunami_rounded, color: Colors.cyan, size: 20),
-              SizedBox(width: 8),
-              Text(
-                'Coastal Storm Surge & Inundation Projections',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              const Icon(Icons.tsunami_rounded, color: Colors.cyan, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Coastal Storm Surge & Inundation Projections',
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -705,10 +761,15 @@ class _CycloneTrackerScreenState extends State<CycloneTrackerScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        surge.coastalDistrict,
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: textPrimary),
+                      Expanded(
+                        child: Text(
+                          surge.coastalDistrict,
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: textPrimary),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
+                      const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
@@ -723,45 +784,69 @@ class _CycloneTrackerScreenState extends State<CycloneTrackerScreen> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildSurgeStat(
-                          'Astronomical Tide',
-                          '${surge.astronomicalTideM.toStringAsFixed(1)} m',
-                          Colors.blueGrey,
-                          textPrimary,
-                          textSecondary,
-                        ),
-                      ),
-                      Expanded(
-                        child: _buildSurgeStat(
-                          'Peak Storm Surge',
-                          '+${surge.peakSurgeM.toStringAsFixed(1)} m',
-                          Colors.cyan,
-                          textPrimary,
-                          textSecondary,
-                        ),
-                      ),
-                      Expanded(
-                        child: _buildSurgeStat(
-                          'Total Water Level',
-                          '${surge.totalWaterLevelM.toStringAsFixed(1)} m',
-                          riskColor,
-                          textPrimary,
-                          textSecondary,
-                        ),
-                      ),
-                      Expanded(
-                        child: _buildSurgeStat(
-                          'Inland Inundation',
-                          '${surge.inlandInundationKm.toStringAsFixed(1)} km',
-                          Colors.deepPurpleAccent,
-                          textPrimary,
-                          textSecondary,
-                        ),
-                      ),
-                    ],
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isWide = constraints.maxWidth > 420;
+                      final astro = _buildSurgeStat(
+                        'Astronomical Tide',
+                        '${surge.astronomicalTideM.toStringAsFixed(1)} m',
+                        Colors.blueGrey,
+                        textPrimary,
+                        textSecondary,
+                      );
+                      final peak = _buildSurgeStat(
+                        'Peak Storm Surge',
+                        '+${surge.peakSurgeM.toStringAsFixed(1)} m',
+                        Colors.cyan,
+                        textPrimary,
+                        textSecondary,
+                      );
+                      final total = _buildSurgeStat(
+                        'Total Water Level',
+                        '${surge.totalWaterLevelM.toStringAsFixed(1)} m',
+                        riskColor,
+                        textPrimary,
+                        textSecondary,
+                      );
+                      final inland = _buildSurgeStat(
+                        'Inland Inundation',
+                        '${surge.inlandInundationKm.toStringAsFixed(1)} km',
+                        Colors.deepPurpleAccent,
+                        textPrimary,
+                        textSecondary,
+                      );
+
+                      if (isWide) {
+                        return Row(
+                          children: [
+                            Expanded(child: astro),
+                            Expanded(child: peak),
+                            Expanded(child: total),
+                            Expanded(child: inland),
+                          ],
+                        );
+                      } else {
+                        return Column(
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(child: astro),
+                                const SizedBox(width: 8),
+                                Expanded(child: peak),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(child: total),
+                                const SizedBox(width: 8),
+                                Expanded(child: inland),
+                              ],
+                            ),
+                          ],
+                        );
+                      }
+                    },
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -787,9 +872,19 @@ class _CycloneTrackerScreenState extends State<CycloneTrackerScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(fontSize: 10, color: textSecondary)),
+        Text(
+          label,
+          style: TextStyle(fontSize: 10, color: textSecondary),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         const SizedBox(height: 2),
-        Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: valueColor)),
+        Text(
+          value,
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: valueColor),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ],
     );
   }
@@ -818,8 +913,14 @@ class _CycloneTrackerScreenState extends State<CycloneTrackerScreen> {
             children: [
               const Icon(Icons.radar_rounded, color: Colors.indigoAccent, size: 18),
               const SizedBox(width: 8),
-              Text('Gale Wind Radii Quadrant Extents (km)',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textPrimary)),
+              Expanded(
+                child: Text(
+                  'Gale Wind Radii Quadrant Extents (km)',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textPrimary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 4),
@@ -836,6 +937,7 @@ class _CycloneTrackerScreenState extends State<CycloneTrackerScreen> {
             gale.radius64ktNwKm,
             AppColors.alertRed,
             isDark,
+            textPrimary,
           ),
           const SizedBox(height: 8),
           _buildQuadrantRow(
@@ -846,6 +948,7 @@ class _CycloneTrackerScreenState extends State<CycloneTrackerScreen> {
             gale.radius50ktNwKm,
             AppColors.alertOrange,
             isDark,
+            textPrimary,
           ),
           const SizedBox(height: 8),
           _buildQuadrantRow(
@@ -856,6 +959,7 @@ class _CycloneTrackerScreenState extends State<CycloneTrackerScreen> {
             gale.radius34ktNwKm,
             Colors.amber,
             isDark,
+            textPrimary,
           ),
         ],
       ),
@@ -870,29 +974,88 @@ class _CycloneTrackerScreenState extends State<CycloneTrackerScreen> {
     double nw,
     Color badgeColor,
     bool isDark,
+    Color textPrimary,
   ) {
     return Container(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: isDark ? AppColors.darkSurfaceHighlight : AppColors.lightSurfaceHighlight,
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: badgeColor.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              speedLabel,
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: badgeColor),
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: badgeColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    speedLabel,
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: badgeColor),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Max: ${[ne, se, sw, nw].reduce((a, b) => a > b ? a : b).toStringAsFixed(0)} km',
+                style: TextStyle(fontSize: 10, color: badgeColor, fontWeight: FontWeight.bold),
+              ),
+            ],
           ),
-          const Spacer(),
-          Text('NE: ${ne.toStringAsFixed(0)}k | SE: ${se.toStringAsFixed(0)}k | SW: ${sw.toStringAsFixed(0)}k | NW: ${nw.toStringAsFixed(0)}k',
-              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(child: _buildQuadrantChip('NE', ne, isDark, textPrimary)),
+              const SizedBox(width: 6),
+              Expanded(child: _buildQuadrantChip('SE', se, isDark, textPrimary)),
+              const SizedBox(width: 6),
+              Expanded(child: _buildQuadrantChip('SW', sw, isDark, textPrimary)),
+              const SizedBox(width: 6),
+              Expanded(child: _buildQuadrantChip('NW', nw, isDark, textPrimary)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuadrantChip(
+    String quad,
+    double radiusKm,
+    bool isDark,
+    Color textPrimary,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 2),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.black26 : Colors.white70,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: isDark ? AppColors.darkOutline : AppColors.lightOutline,
+          width: 0.8,
+        ),
+      ),
+      child: Column(
+        children: [
+          Text(
+            quad,
+            style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.brandBlue),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '${radiusKm.toStringAsFixed(0)} km',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: textPrimary),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ],
       ),
     );
@@ -922,9 +1085,13 @@ class _CycloneTrackerScreenState extends State<CycloneTrackerScreen> {
             children: [
               const Icon(Icons.timeline_rounded, color: AppColors.brandBlue, size: 18),
               const SizedBox(width: 8),
-              Text(
-                '72-Hour Sequential Track & Intensity Forecast',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textPrimary),
+              Expanded(
+                child: Text(
+                  '72-Hour Sequential Track & Intensity Forecast',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textPrimary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
@@ -1037,11 +1204,15 @@ class _CycloneTrackerScreenState extends State<CycloneTrackerScreen> {
             children: [
               const Icon(Icons.shield_rounded, color: AppColors.alertRed, size: 20),
               const SizedBox(width: 8),
-              Text(
-                'NDMA Coastal Evacuation Directives',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textPrimary),
+              Expanded(
+                child: Text(
+                  'NDMA Coastal Evacuation Directives',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textPrimary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
@@ -1086,12 +1257,18 @@ class _CycloneTrackerScreenState extends State<CycloneTrackerScreen> {
           ),
           const SizedBox(height: 10),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.home_work_rounded, size: 16, color: AppColors.alertGreen),
+              const Padding(
+                padding: EdgeInsets.only(top: 1.0),
+                child: Icon(Icons.home_work_rounded, size: 16, color: AppColors.alertGreen),
+              ),
               const SizedBox(width: 6),
-              Text(
-                'Multi-Purpose Cyclone Shelters (MPCS): ${evac.sheltersActiveCount} active & manned',
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.alertGreen),
+              Expanded(
+                child: Text(
+                  'Multi-Purpose Cyclone Shelters (MPCS): ${evac.sheltersActiveCount} active & manned',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.alertGreen),
+                ),
               ),
             ],
           ),
@@ -1157,9 +1334,13 @@ class _CycloneTrackerScreenState extends State<CycloneTrackerScreen> {
             children: [
               const Icon(Icons.campaign_rounded, color: AppColors.alertOrange, size: 20),
               const SizedBox(width: 8),
-              Text(
-                'Vernacular Emergency Broadcast',
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textPrimary),
+              Expanded(
+                child: Text(
+                  'Vernacular Emergency Broadcast',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textPrimary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),

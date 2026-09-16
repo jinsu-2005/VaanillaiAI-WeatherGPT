@@ -12,7 +12,20 @@
           "package_name": "com.vaanilaiai.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "380758138825-errb30pb9956vqv8heo9m6pfqq1v4dpi.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.vaanilaiai.app",
+            "certificate_hash": "ddd1ce0bc206e06bf2419db0e5ac29e3d6b2007c"
+          }
+        },
+        {
+          "client_id": "380758138825-rtsanqlc5ae3ng65npj36pb8sfh74cnf.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDRPPhVU51sG20zuMdAaXx9wYaWTR32lsc"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "380758138825-rtsanqlc5ae3ng65npj36pb8sfh74cnf.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
