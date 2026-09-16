@@ -97,7 +97,7 @@ class Settings(BaseSettings):
     # Security, CORS & Auth
     SECRET_KEY: str = ""
     ALLOWED_ORIGINS: str = ""
-    FIREBASE_PROJECT_ID: str = "vaanilaiai"
+    FIREBASE_PROJECT_ID: str = "vaanilai-ai"
     REDIS_URL: str = ""
 
     def get_secret_key(self) -> str:
@@ -122,6 +122,8 @@ class Settings(BaseSettings):
             "http://127.0.0.1:3000",
             "https://vaanilai-ai-backend.onrender.com",
             "https://vaanilaiai.web.app",
+            "https://vaanilai-ai.web.app",
+            "https://vaanilai-ai.firebaseapp.com",
         ]
 
 

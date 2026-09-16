@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:provider/provider.dart';
@@ -39,7 +39,7 @@ class _VoiceWeatherScreenState extends State<VoiceWeatherScreen>
   final TextEditingController _queryController = TextEditingController();
   final FocusNode _queryFocus = FocusNode();
 
-  WebSocket? _webSocket;
+  WebSocketChannel? _channel;
   StreamSubscription? _webSocketSub;
 
   LiveVoiceState _liveState = LiveVoiceState.connecting;
@@ -114,16 +114,16 @@ class _VoiceWeatherScreenState extends State<VoiceWeatherScreen>
     await _audioEngine.stopRecording();
     await _audioEngine.stopPlayback();
     try {
-      if (_webSocket != null && _isLiveConnected) {
-        _webSocket?.add(jsonEncode({'event': 'DISCONNECT'}));
+      if (_channel != null && _isLiveConnected) {
+        _channel?.sink.add(jsonEncode({'event': 'DISCONNECT'}));
       }
     } catch (_) {}
     await _webSocketSub?.cancel();
     _webSocketSub = null;
     try {
-      await _webSocket?.close();
+      await _channel?.sink.close();
     } catch (_) {}
-    _webSocket = null;
+    _channel = null;
   }
 
   Future<void> _terminateSession() async {
@@ -190,8 +190,9 @@ class _VoiceWeatherScreenState extends State<VoiceWeatherScreen>
     debugPrint('LIVE_CONNECT: Connecting to $uriStr');
 
     try {
-      final ws = await WebSocket.connect(uriStr).timeout(const Duration(seconds: 12));
-      _webSocket = ws;
+      final channel = WebSocketChannel.connect(Uri.parse(uriStr));
+      await channel.ready.timeout(const Duration(seconds: 12));
+      _channel = channel;
       debugPrint('LIVE_CONNECTED: WebSocket opened to backend Gemini Live bridge');
 
       setState(() {
@@ -210,7 +211,7 @@ class _VoiceWeatherScreenState extends State<VoiceWeatherScreen>
           return;
         }
         try {
-          _webSocket?.add(pcmChunk);
+          _channel?.sink.add(pcmChunk);
         } catch (e) {
           debugPrint('LIVE_ERROR: Error sending mic chunk: $e');
         }
@@ -222,10 +223,14 @@ class _VoiceWeatherScreenState extends State<VoiceWeatherScreen>
         if (mounted) {
           setState(() => _liveState = LiveVoiceState.listening);
         }
+      } else {
+        if (mounted) {
+          setState(() => _liveState = LiveVoiceState.listening);
+        }
       }
 
       // Listen to incoming messages from backend / Gemini Live
-      _webSocketSub = ws.listen(
+      _webSocketSub = channel.stream.listen(
         (dynamic message) {
           if (message is String) {
             _handleLiveServerJson(message);
@@ -389,7 +394,7 @@ class _VoiceWeatherScreenState extends State<VoiceWeatherScreen>
     final clean = text.trim();
     if (clean.isEmpty) return;
 
-    if (_webSocket != null && _isLiveConnected) {
+    if (_channel != null && _isLiveConnected) {
       debugPrint('TEXT_INPUT: Sending query to Gemini Live: "$clean"');
       setState(() {
         _lastQuery = clean;
@@ -397,7 +402,7 @@ class _VoiceWeatherScreenState extends State<VoiceWeatherScreen>
         _liveState = LiveVoiceState.thinking;
       });
 
-      _webSocket?.add(jsonEncode({
+      _channel?.sink.add(jsonEncode({
         'event': 'TEXT_INPUT',
         'text': clean,
       }));
