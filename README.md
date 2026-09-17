@@ -28,6 +28,9 @@
 | **Backend API (Swagger Docs)** | **Render Cloud** | [https://vaanilai-ai-backend.onrender.com/docs](https://vaanilai-ai-backend.onrender.com/docs) | 🟢 Operational |
 | **Backend Health Check** | **Render Cloud** | [https://vaanilai-ai-backend.onrender.com/api/v1/health](https://vaanilai-ai-backend.onrender.com/api/v1/health) | 🟢 Operational |
 | **Live Voice WebSocket** | **Render Cloud (WSS)** | `wss://vaanilai-ai-backend.onrender.com/api/v1/voice/live` | 🟢 Operational |
+| **Android Release APK** | **GitHub Releases** | [Download VaanilaiAI-v1.0.0.apk](https://github.com/jinsu-2005/VaanillaiAI-WeatherGPT/releases/latest) | 🟢 Available |
+
+> 📱 **Web Mobile View Tip**: To experience the responsive mobile layout in your desktop browser, right click anywhere, select **Inspect** (or press `F12` / `Ctrl + Shift + I`), then click the **Toggle device toolbar** (mobile/tablet devices icon) in the top-left corner of the DevTools console and choose a mobile device (such as Pixel 7 or iPhone 14 Pro).
 
 ---
 
