@@ -45,7 +45,6 @@
 - [7. Cloud Deployment](#7-cloud-deployment)
 - [8. API Endpoints Reference](#8-api-endpoints-reference)
 - [9. Security & Governance](#9-security--governance)
-- [10. License](#10-license)
 
 ---
 
@@ -318,9 +317,3 @@ npx -y firebase-tools@latest deploy --only hosting
 * **CORS Whitelisting**: CORS middleware explicitly whitelists trusted domains (`https://vaanilai-ai.web.app`, `https://vaanilai-ai.firebaseapp.com`, `http://localhost:*`).
 * **Firebase Token Verification**: Incoming requests with `Authorization: Bearer <token>` are verified using cryptographic JWT inspection.
 * **Firestore Security Rules**: Audited role-based access separating public warnings, private saved profiles, and user hazard reports.
-
----
-
-## 10. License
-
-This project is open source and available under the [MIT License](LICENSE).
